@@ -161,7 +161,7 @@ class payrexx_ORIGIN
         $description = constant('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($_SESSION['language_code']));
         $description .= '<style> .payrexx .payment-module-icon img{background: initial !important;}</style><br>';
         foreach ($this->getPaymentMethods() as $method) {
-            if (constant(MODULE_PAYMENT_PAYREXX_ . strtoupper($method))) {
+            if (constant(MODULE_PAYMENT_PAYREXX_ . strtoupper($method)) === 'true') {
                 $description .= $this->_getPaymentMethodIcon($method);
             }
         }
