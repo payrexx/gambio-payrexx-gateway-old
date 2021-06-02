@@ -141,7 +141,7 @@ class payrexx_ORIGIN
         if($this->_validateSignature()) {
             $selection = [
                 'id' => $this->code,
-                'module' => MODULE_PAYMENT_PAYREXX_DISPLAY_NAME,
+                'module' => constant('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($_SESSION['language_code'])),
                 'description' => $this->_getDescription(),
 //                'logo_url' => 'http://gambio.test/GX4401/Dateien/images/icons/payment/payrexx.png',
 //                'logo_alt' => MODULE_PAYMENT_PAYREXX_DISPLAY_NAME,
@@ -158,7 +158,7 @@ class payrexx_ORIGIN
      */
     protected function _getDescription()
     {
-        $description = MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION;
+        $description = constant('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($_SESSION['language_code']));
         $description .= '<style> .payrexx .payment-module-icon img{background: initial !important;}</style><br>';
         foreach ($this->getPaymentMethods() as $method) {
             if (constant(MODULE_PAYMENT_PAYREXX_ . strtoupper($method))) {
@@ -355,7 +355,9 @@ class payrexx_ORIGIN
          *  149 => Invoice created
          */
         switch ($response->getStatus()) {
+            case \Payrexx\Models\Response\Transaction::CANCELLED:
             case \Payrexx\Models\Response\Transaction::ERROR:
+            case \Payrexx\Models\Response\Transaction::EXPIRED:
                 $this->_updateOrderStatus($insertId, 0);
                 break;
             case \Payrexx\Models\Response\Transaction::WAITING:
@@ -459,6 +461,17 @@ class payrexx_ORIGIN
         return $isInstalled;
     }
 
+    protected function _xtc_get_languages()
+    {
+        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+        $languages = $db->select('languages_id, name, code, status, status_admin')
+            ->select('languages_id AS id')
+            ->order_by('sort_order ASC')
+            ->get('languages')
+            ->result_array();
+        return $languages;
+    }
+
     /**
      * @return string[][]
      */
@@ -488,17 +501,30 @@ class payrexx_ORIGIN
             'PREFIX'    => [
                 'value' => 'gambio',
             ],
-            'DISPLAY_NAME'    => [
-                'value' => 'Payrexx Payment Gateway',
-            ],
-            'DISPLAY_DESCRIPTION'    => [
-                'value' => 'The Payrexx payment gateway accept many different payment methods securely.',
-                'type'  => 'textarea',
-            ],
             'LOOK_AND_FEEL_ID'    => [
                 'value' => '',
             ]
         ];
+
+        /**
+         * Creating text fields for each language.
+         */
+        $availableLanguages = $this->_xtc_get_languages();
+        if(!empty($availableLanguages)) {
+            foreach ($availableLanguages as $language) {
+                define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($language['code']) . '_TITLE', MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_TITLE_TXT . ' ' . $language['name']);
+                define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($language['code']) . '_DESC', MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_DESC_TXT . ' ' . $language['name']);
+                $config['DISPLAY_NAME_' . strtoupper($language['code'])] = ['value' => $this->title];
+
+                define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($language['code']) . '_TITLE', MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_TITLE_TXT . ' ' . $language['name']);
+                define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($language['code']) . '_DESC', MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_DESC_TXT . ' ' . $language['name']);
+                $config['DISPLAY_DESCRIPTION_' . strtoupper($language['code'])] = ['value' => $this->info];
+            }
+        }
+
+        /**
+         * Creating checkbox for each payment method.
+         */
         foreach ($this->getPaymentMethods() as $method) {
             define('MODULE_PAYMENT_PAYREXX_' . strtoupper($method) . '_TITLE', str_replace('_', ' ', ucfirst($method)));
             define('MODULE_PAYMENT_PAYREXX_' . strtoupper($method) . '_DESC', MODULE_PAYMENT_PAYREXX_METHOD_DESC . ucfirst($method) .'?');
