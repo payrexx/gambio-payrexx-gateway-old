@@ -18,6 +18,8 @@
 * 1.0.0 Payrexx Payment Gateway.
 ---------      -----------------------------*/
 
+use \Payrexx\Models\Response\Transaction;
+
 class payrexx_ORIGIN
 {
     public $code, $title, $description, $enabled;
@@ -46,8 +48,7 @@ class payrexx_ORIGIN
         $this->info = defined('MODULE_PAYMENT_PAYREXX_TEXT_INFO') ? MODULE_PAYMENT_PAYREXX_TEXT_INFO : '';
         $this->min_order   = defined('MODULE_PAYMENT_PAYREXX_MIN_ORDER') ? MODULE_PAYMENT_PAYREXX_MIN_ORDER : '0';
         $this->sort_order  = defined('MODULE_PAYMENT_PAYREXX_SORT_ORDER') ? MODULE_PAYMENT_PAYREXX_SORT_ORDER : '0';
-        $this->enabled     = defined('MODULE_PAYMENT_' . strtoupper($this->code) . '_STATUS')
-                             && filter_var(constant('MODULE_PAYMENT_' . strtoupper($this->code) . '_STATUS'), FILTER_VALIDATE_BOOLEAN);
+        $this->enabled     = defined('MODULE_PAYMENT_' . strtoupper($this->code) . '_STATUS') && filter_var(constant('MODULE_PAYMENT_' . strtoupper($this->code) . '_STATUS'), FILTER_VALIDATE_BOOLEAN);
         $this->register_autoloader();
     }
 
@@ -101,27 +102,12 @@ class payrexx_ORIGIN
         }
     }
 
-    /**
-     * @return bool
-     */
     public function getGatewayById($id) {
         $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
-        $transaction = new \Payrexx\Models\Request\Transaction();
         $gateway = new \Payrexx\Models\Request\Gateway();
         $gateway->setId($id);
         try {
             $response = $payrexx->getOne($gateway);
-            return $response;
-        } catch (\Payrexx\PayrexxException $e) {
-            return [];
-        }
-    }
-
-    public function getPayrexxPaymentMethods() {
-        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
-        $paymentProvider = new \Payrexx\Models\Request\PaymentProvider();
-        try {
-            $response = $payrexx->getAll($paymentProvider);
             return $response;
         } catch (\Payrexx\PayrexxException $e) {
             return [];
@@ -133,18 +119,16 @@ class payrexx_ORIGIN
      */
     public function selection()
     {
-        if(isset($_GET['payrexx_cancel'])) {
+        if (isset($_GET['payrexx_cancel'])) {
             $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_CANCEL);
             $this->_checkGatewayResponse();
         }
 
-        if($this->_validateSignature()) {
+        if ($this->_validateSignature()) {
             $selection = [
                 'id' => $this->code,
                 'module' => constant('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($_SESSION['language_code'])),
                 'description' => $this->_getDescription(),
-//                'logo_url' => 'http://gambio.test/GX4401/Dateien/images/icons/payment/payrexx.png',
-//                'logo_alt' => MODULE_PAYMENT_PAYREXX_DISPLAY_NAME,
             ];
 
             return $selection;
@@ -212,7 +196,7 @@ class payrexx_ORIGIN
      */
     public function confirmation()
     {
-        if(isset($_GET['payrexx_failed'])) {
+        if (isset($_GET['payrexx_failed'])) {
             $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
             $this->_checkGatewayResponse();
         }
@@ -238,7 +222,7 @@ class payrexx_ORIGIN
      */
     public function before_process()
     {
-        if(isset($_GET['payrexx_success'])) {
+        if (isset($_GET['payrexx_success'])) {
             $this->_checkGatewayResponse();
         }
 
@@ -343,7 +327,11 @@ class payrexx_ORIGIN
      */
     protected function _checkGatewayResponse() {
         $insertId = trim($_SESSION['payrexx_gateway_referrenceId']);
-        $response = $this->getGatewayById($_SESSION['payrexx_gateway_id']);
+        $gateway = $this->getGatewayById($_SESSION['payrexx_gateway_id']);
+
+        if ($gateway && $invoices = $gateway->getInvoices()) {
+            $status = $invoices[0]['transactions'][0]['status'];
+        }
 
         /**
          * Order Statuses
@@ -354,19 +342,20 @@ class payrexx_ORIGIN
          *  99 => Cancelled
          *  149 => Invoice created
          */
-        switch ($response->getStatus()) {
-            case \Payrexx\Models\Response\Transaction::CANCELLED:
-            case \Payrexx\Models\Response\Transaction::ERROR:
-            case \Payrexx\Models\Response\Transaction::EXPIRED:
-                $this->_updateOrderStatus($insertId, 0);
-                break;
-            case \Payrexx\Models\Response\Transaction::WAITING:
-            case \Payrexx\Models\Response\Transaction::AUTHORIZED:
-            case \Payrexx\Models\Response\Transaction::RESERVED:
+        switch ($status) {
+            case Transaction::WAITING:
+            case Transaction::AUTHORIZED:
+            case Transaction::RESERVED:
                 $this->_updateOrderStatus($insertId, 1);
                 break;
-            case \Payrexx\Models\Response\Transaction::CONFIRMED:;
+            case Transaction::CONFIRMED:;
                 $this->_updateOrderStatus($insertId, 2);
+                break;
+            case Transaction::CANCELLED:
+            case Transaction::ERROR:
+            case Transaction::EXPIRED:
+            default:
+                $this->_updateOrderStatus($insertId, 99);
                 break;
         }
     }
@@ -392,7 +381,7 @@ class payrexx_ORIGIN
      */
     public function check()
     {
-        if(!isset($this->_check))
+        if (!isset($this->_check))
         {
             $check_query  = xtc_db_query("SELECT `value` FROM " . TABLE_CONFIGURATION
                 . " WHERE `key` = 'configuration/MODULE_PAYMENT_" . strtoupper($this->code)
