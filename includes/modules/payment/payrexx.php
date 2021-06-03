@@ -121,8 +121,7 @@ class payrexx_ORIGIN
     {
         if (isset($_GET['payrexx_cancel'])) {
             $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_CANCEL);
-            $insertId = trim($_SESSION['payrexx_gateway_referrenceId']);
-            $this->_updateOrderStatus($insertId, 99);
+            $this->_checkGatewayResponse();
         }
 
         if ($this->_validateSignature()) {
