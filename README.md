@@ -1,7 +1,5 @@
 # payress-payment-gateway
-Payrexx Payment Gateway Plugin for Gambio allows you to integrate your Gambio shop easily with Payrexx Payment system. This allows you to pay your customer through Payrexx Payment Gateway.
-
-Before installing and activating your plugin, please contact support@payrexx.com, this is necessary to ensure everything has been set up correctly and activated from Payrexx’s side.
+Payrexx Payment Gateway Plugin for Gambio allows you to integrate your Gambio shop easily with Payrexx Payment system.
 
 ## System Requirements
 
