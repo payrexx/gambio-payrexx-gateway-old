@@ -224,6 +224,9 @@ class payrexx_ORIGIN
     {
         if (isset($_GET['payrexx_success'])) {
             $this->_checkGatewayResponse();
+            xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_SUCCESS, '', 'SSL'));
+
+            return true;
         }
 
         return false;
@@ -268,7 +271,10 @@ class payrexx_ORIGIN
         $gateway->setCancelRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL'));
 
         $amount = floatval($order->info['total']);
-        $currency = $order->info['currency'];
+
+        if (!$_SESSION['customers_status']['customers_status_show_price_tax']) {
+            $amount += floatval($order->info['tax']);
+        }
 
         $productNames = array();
         $basket = array();
