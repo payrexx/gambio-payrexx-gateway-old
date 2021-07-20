@@ -121,7 +121,6 @@ class payrexx_ORIGIN
     {
         if (isset($_GET['payrexx_cancel'])) {
             $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_CANCEL);
-            $this->_checkGatewayResponse();
         }
 
         if ($this->_validateSignature()) {
@@ -222,11 +221,14 @@ class payrexx_ORIGIN
      */
     public function before_process()
     {
-        if (isset($_GET['payrexx_success'])) {
-            $this->_checkGatewayResponse();
-            xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_SUCCESS, '', 'SSL'));
-
-            return true;
+        if (!isset($_GET['payrexx_success'])) {
+            $payrexx = new Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
+            $response = $payrexx->create($this->_createPayrexxGateway());
+            $_SESSION['payrexx_gateway_id'] = $response->getId();
+            $_SESSION['payrexx_gateway_referrenceId'] = $_SESSION['cartID'];
+            $payrexxPaymentUrl = 'https://' . MODULE_PAYMENT_PAYREXX_INSTANCE_NAME . '.payrexx.com/'
+                . $_SESSION['language_code'] . '/?payment=' . $response->getHash();
+            xtc_redirect($payrexxPaymentUrl);
         }
 
         return false;
@@ -238,14 +240,12 @@ class payrexx_ORIGIN
     public function after_process()
     {
         try {
-            if(!isset($_GET['payrexx_success'])) {
-                $payrexx = new Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
-                $response = $payrexx->create($this->_createPayrexxGateway());
-                $_SESSION['payrexx_gateway_id'] = $response->getId();
+            if(isset($_GET['payrexx_success'])) {
                 $_SESSION['payrexx_gateway_referrenceId'] = new IdType((int)$GLOBALS['insert_id']);
-                $payrexxPaymentUrl = 'https://' . MODULE_PAYMENT_PAYREXX_INSTANCE_NAME . '.payrexx.com/'
-                    . $_SESSION['language_code'] . '/?payment=' . $response->getHash();
-                xtc_redirect($payrexxPaymentUrl);
+                $this->_checkGatewayResponse();
+            } else {
+                $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
+                xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'));
             }
         } catch (\Payrexx\PayrexxException $e) {
         }
@@ -260,7 +260,7 @@ class payrexx_ORIGIN
      */
     protected function _createPayrexxGateway() {
         global $order;
-        $insertId = new IdType((int)$GLOBALS['insert_id']);
+        $insertId = trim($_SESSION['cartID']); //new IdType((int)$GLOBALS['insert_id']);
         $gateway = new \Payrexx\Models\Request\Gateway();
 
         /**
@@ -271,10 +271,7 @@ class payrexx_ORIGIN
         $gateway->setCancelRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL'));
 
         $amount = floatval($order->info['total']);
-
-        if (!$_SESSION['customers_status']['customers_status_show_price_tax']) {
-            $amount += floatval($order->info['tax']);
-        }
+        $currency = $order->info['currency'];
 
         $productNames = array();
         $basket = array();
@@ -337,32 +334,33 @@ class payrexx_ORIGIN
 
         if ($gateway && $invoices = $gateway->getInvoices()) {
             $status = $invoices[0]['transactions'][0]['status'];
-        }
 
-        /**
-         * Order Statuses
-         *  0 => Not validated
-         *  1 => Pending
-         *  2 => Processing
-         *  3 => Dispatched
-         *  99 => Cancelled
-         *  149 => Invoice created
-         */
-        switch ($status) {
-            case Transaction::WAITING:
-            case Transaction::AUTHORIZED:
-            case Transaction::RESERVED:
-                $this->_updateOrderStatus($insertId, 1);
-                break;
-            case Transaction::CONFIRMED:;
-                $this->_updateOrderStatus($insertId, 2);
-                break;
-            case Transaction::CANCELLED:
-            case Transaction::ERROR:
-            case Transaction::EXPIRED:
-            default:
-                $this->_updateOrderStatus($insertId, 99);
-                break;
+            /**
+             * Order Statuses
+             *  0 => Not validated
+             *  1 => Pending
+             *  2 => Processing
+             *  3 => Dispatched
+             *  99 => Cancelled
+             *  149 => Invoice created
+             */
+            switch ($status) {
+                case Transaction::WAITING:
+                case Transaction::AUTHORIZED:
+                case Transaction::RESERVED:
+                    $this->_updateOrderStatus($insertId, 1);
+                    break;
+                case Transaction::CONFIRMED:
+                    ;
+                    $this->_updateOrderStatus($insertId, 2);
+                    break;
+                case Transaction::CANCELLED:
+                case Transaction::ERROR:
+                case Transaction::EXPIRED:
+                default:
+                    $this->_updateOrderStatus($insertId, 99);
+                    break;
+            }
         }
     }
 
