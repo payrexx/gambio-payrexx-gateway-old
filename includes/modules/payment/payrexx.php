@@ -271,6 +271,10 @@ class payrexx_ORIGIN
         $gateway->setCancelRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL'));
 
         $amount = floatval($order->info['total']);
+        if (!$_SESSION['customers_status']['customers_status_show_price_tax']) {
+            $amount += floatval($order->info['tax']);
+        }
+
         $currency = $order->info['currency'];
 
         $productNames = array();
