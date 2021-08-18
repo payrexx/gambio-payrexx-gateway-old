@@ -231,8 +231,7 @@ class payrexx_ORIGIN
             xtc_redirect($payrexxPaymentUrl);
         }
 
-        xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_SUCCESS, '', 'SSL'));
-        return true;
+        return false;
     }
 
     /**
