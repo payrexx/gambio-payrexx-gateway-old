@@ -231,7 +231,8 @@ class payrexx_ORIGIN
             xtc_redirect($payrexxPaymentUrl);
         }
 
-        return false;
+        xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_SUCCESS, '', 'SSL'));
+        return true;
     }
 
     /**
@@ -270,10 +271,15 @@ class payrexx_ORIGIN
         $gateway->setFailedRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL'));
         $gateway->setCancelRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL'));
 
-        $amount = floatval($order->info['total']);
+        $amount = floatval($order->info['subtotal']);
+        $amount += floatval($_SESSION['CSCC_debug']['shipping_cost']);
         if (!$_SESSION['customers_status']['customers_status_show_price_tax']) {
             $amount += floatval($order->info['tax']);
         }
+
+        // Round to 5 and format as cent
+        //$amount = 5 * round(($amount * 100) / 5);;
+        $amount = $amount * 100;
 
         $currency = $order->info['currency'];
 
@@ -293,7 +299,7 @@ class payrexx_ORIGIN
         }
 
         //$gateway->setBasket($basket);
-        $gateway->setAmount($amount * 100);
+        $gateway->setAmount((int)$amount);
         if ($currency == "") {
             $currency = "USD";
         }
