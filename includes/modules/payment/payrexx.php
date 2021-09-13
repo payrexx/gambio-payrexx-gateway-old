@@ -92,7 +92,7 @@ class payrexx_ORIGIN
      * @return bool
      */
     protected function _validateSignature() {
-        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
+        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
         $signatureCheck = new \Payrexx\Models\Request\SignatureCheck();
         try {
             $response = $payrexx->getOne($signatureCheck);
@@ -103,7 +103,7 @@ class payrexx_ORIGIN
     }
 
     public function getGatewayById($id) {
-        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
+        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
         $gateway = new \Payrexx\Models\Request\Gateway();
         $gateway->setId($id);
         try {
@@ -493,6 +493,9 @@ class payrexx_ORIGIN
             'ZONE'       => [
                 'value' => '',
                 'type'  => 'geo-zone',
+            ],
+            'PLATFORM'    => [
+                'value'  => 'payrexx.com',
             ],
             'INSTANCE_NAME'    => [
                 'value' => '',
