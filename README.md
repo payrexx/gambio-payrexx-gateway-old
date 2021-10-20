@@ -46,6 +46,14 @@ Follow these steps to install the plugin.
 
 - A complete working plugin
 
+### 1.2.0 (04-10-2021)
+
+- Add ideal-pay.ch in platform providers list.
+
+### 1.2.1 (20-10-2021)
+
+- Add ideal-pay.ch in platform providers list.
+
 ## Authors
 
 * **kraath** - [github profile](https://github.com/kraath)
