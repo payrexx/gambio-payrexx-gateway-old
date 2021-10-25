@@ -46,5 +46,5 @@
     define('MODULE_PAYMENT_PAYREXX_CANCEL', 'Payment cancelled! Please choose Payrexx and try again.');
     define('MODULE_PAYMENT_PAYREXX_METHOD_DESC', 'Do you want to accept payment by');
     define('MODULE_PAYMENT_PAYREXX_PLATFORM_TITLE', 'Platform');
-    $platforms = '<li>payrexx.com</li><li>zahls.ch</li><li>spenden-grunliberale.ch</li><li>deinshop.online</li><li>swissbrain-pay.ch</li><li>loop-pay.com</li><li>shop-and-pay.com</li>';
+    $platforms = '<li>payrexx.com</li><li>zahls.ch</li><li>spenden-grunliberale.ch</li><li>deinshop.online</li><li>swissbrain-pay.ch</li><li>loop-pay.com</li><li>shop-and-pay.com</li><li>ideal-pay.ch</li>';
     define('MODULE_PAYMENT_PAYREXX_PLATFORM_DESC', 'Choose the platform provider from the list:' . $platforms);
