@@ -413,9 +413,9 @@ class payrexx_ORIGIN
         $config     = $this->_configuration();
         $sort_order = 0;
         foreach ($config as $key => $data) {
-            $install_query = "INSERT INTO `gx_configurations` ( `key`, `value`,  `legacy_group_id`, `sort_order`, `type`, `last_modified`) "
+            $install_query = "INSERT INTO `gx_configurations` ( `key`, `value`, `sort_order`, `type`, `last_modified`) "
                 . "values ('configuration/MODULE_PAYMENT_" . strtoupper($this->code) . "_" . $key . "', '"
-                . $data['value'] . "', '6', '" . $sort_order . "', '" . addslashes($data['type']) . "', now())";
+                . $data['value'] . "', '" . $sort_order . "', '" . addslashes($data['type']) . "', now())";
             xtc_db_query($install_query);
             $sort_order++;
         }
@@ -486,9 +486,11 @@ class payrexx_ORIGIN
             ],
             'SORT_ORDER' => [
                 'value' => '-9999',
+                'type' => 'number'
             ],
             'ALLOWED'    => [
                 'value' => '',
+                'type' => 'text'
             ],
             'ZONE'       => [
                 'value' => '',
@@ -496,18 +498,23 @@ class payrexx_ORIGIN
             ],
             'PLATFORM'    => [
                 'value'  => 'payrexx.com',
+                'type' => 'text'
             ],
             'INSTANCE_NAME'    => [
                 'value' => '',
+                'type' => 'text'
             ],
             'API_KEY'    => [
                 'value' => '',
+                'type' => 'text'
             ],
             'PREFIX'    => [
                 'value' => 'gambio',
+                'type' => 'text'
             ],
             'LOOK_AND_FEEL_ID'    => [
                 'value' => '',
+                'type' => 'text'
             ]
         ];
 
@@ -519,11 +526,11 @@ class payrexx_ORIGIN
             foreach ($availableLanguages as $language) {
                 define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($language['code']) . '_TITLE', MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_TITLE_TXT . ' ' . $language['name']);
                 define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($language['code']) . '_DESC', MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_DESC_TXT . ' ' . $language['name']);
-                $config['DISPLAY_NAME_' . strtoupper($language['code'])] = ['value' => $this->title];
+                $config['DISPLAY_NAME_' . strtoupper($language['code'])] = ['value' => $this->title, 'type' => 'text'];
 
                 define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($language['code']) . '_TITLE', MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_TITLE_TXT . ' ' . $language['name']);
                 define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($language['code']) . '_DESC', MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_DESC_TXT . ' ' . $language['name']);
-                $config['DISPLAY_DESCRIPTION_' . strtoupper($language['code'])] = ['value' => $this->info];
+                $config['DISPLAY_DESCRIPTION_' . strtoupper($language['code'])] = ['value' => $this->info, 'type' => 'text'];
             }
         }
 
