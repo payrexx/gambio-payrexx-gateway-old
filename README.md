@@ -5,9 +5,6 @@ Payrexx Payment Gateway Plugin for Gambio allows you to integrate your Gambio sh
 
 - Gambio GX4 platform
 
-## Known issues
-- Not any known issue
-
 ## Guides
 1. [User Guide](https://docs.google.com/document/d/1Cjqsv64RGwqucXJVnn0GQay0Z9Zq_aLhUd_we5JUqPs/edit)
 
