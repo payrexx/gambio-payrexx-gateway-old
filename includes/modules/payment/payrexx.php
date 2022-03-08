@@ -222,7 +222,7 @@ class payrexx_ORIGIN
     public function before_process()
     {
         if (!isset($_GET['payrexx_success'])) {
-            $payrexx = new Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY);
+            $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
             $response = $payrexx->create($this->_createPayrexxGateway());
             $_SESSION['payrexx_gateway_id'] = $response->getId();
             $_SESSION['payrexx_gateway_referrenceId'] = $_SESSION['cartID'];
