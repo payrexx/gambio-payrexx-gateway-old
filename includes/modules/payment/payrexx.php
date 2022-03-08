@@ -77,7 +77,6 @@ class payrexx_ORIGIN
                 $this->enabled = false;
             }
         }
-
     }
 
     /**
@@ -92,7 +91,7 @@ class payrexx_ORIGIN
      * @return bool
      */
     protected function _validateSignature() {
-        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
+        $payrexx = $this->getInterface();
         $signatureCheck = new \Payrexx\Models\Request\SignatureCheck();
         try {
             $response = $payrexx->getOne($signatureCheck);
@@ -103,7 +102,7 @@ class payrexx_ORIGIN
     }
 
     public function getGatewayById($id) {
-        $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
+        $payrexx = $this->getInterface();
         $gateway = new \Payrexx\Models\Request\Gateway();
         $gateway->setId($id);
         try {
@@ -221,17 +220,23 @@ class payrexx_ORIGIN
      */
     public function before_process()
     {
-        if (!isset($_GET['payrexx_success'])) {
-            $payrexx = new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
-            $response = $payrexx->create($this->_createPayrexxGateway());
-            $_SESSION['payrexx_gateway_id'] = $response->getId();
-            $_SESSION['payrexx_gateway_referrenceId'] = $_SESSION['cartID'];
-            $payrexxPaymentUrl = 'https://' . MODULE_PAYMENT_PAYREXX_INSTANCE_NAME . '.payrexx.com/'
-                . $_SESSION['language_code'] . '/?payment=' . $response->getHash();
-            xtc_redirect($payrexxPaymentUrl);
+        if (isset($_GET['payrexx_success'])) {
+            return false;
         }
 
-        return false;
+        $platformBaseUrl = trim(MODULE_PAYMENT_PAYREXX_PLATFORM);
+        try {
+            $payrexx = $this->getInterface();
+            $response = $payrexx->create($this->_createPayrexxGateway());
+        } catch (\Payrexx\PayrexxException $e) {
+            return false;
+        }
+
+        $_SESSION['payrexx_gateway_id'] = $response->getId();
+        $_SESSION['payrexx_gateway_referrenceId'] = $_SESSION['cartID'];
+        $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
+
+        xtc_redirect($payrexxPaymentUrl);
     }
 
     /**
@@ -335,7 +340,7 @@ class payrexx_ORIGIN
     }
 
     /**
-     * Gets transaction and check response.
+     * Gets transaction and check response
      */
     protected function _checkGatewayResponse() {
         $insertId = trim($_SESSION['payrexx_gateway_referrenceId']);
@@ -558,7 +563,9 @@ class payrexx_ORIGIN
 
         return $paymentMethods;
     }
-
+    private function getInterface() {
+        return new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
+    }
 }
 
 MainFactory::load_origin_class('payrexx');
