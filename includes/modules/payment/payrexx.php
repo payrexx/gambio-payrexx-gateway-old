@@ -275,8 +275,7 @@ class payrexx_ORIGIN
         $gateway->setFailedRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL'));
         $gateway->setCancelRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL'));
 
-        $amount = floatval($order->info['subtotal']);
-        $amount += floatval($_SESSION['CSCC_debug']['shipping_cost']);
+        $amount = floatval($order->info['total']);
         if (!$_SESSION['customers_status']['customers_status_show_price_tax']) {
             $amount += floatval($order->info['tax']);
         }
@@ -287,8 +286,8 @@ class payrexx_ORIGIN
 
         $currency = $order->info['currency'];
 
-        $productNames = array();
-        $basket = array();
+        $productNames = [];
+        $basket = [];
         foreach ($order->products as $item) {
             $quantity = $item['qty'] > 1 ? $item['quantity'] . 'x ' : '';
             $productNames[] = $quantity . $item['name'];
