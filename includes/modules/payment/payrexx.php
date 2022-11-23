@@ -38,8 +38,8 @@ class payrexx_ORIGIN
     public $order_status;
 
     /**
-	 * @var bool
-	 */
+     * @var bool
+     */
     public $tmpOrders = true;
 
     /**
@@ -247,7 +247,7 @@ class payrexx_ORIGIN
      * Create Payrexx Gateway.
      *
      * @param order $order
-     * @return \Payrexx\Models\Request\Gateway
+     * @return \Payrexx\Models\Response\Gateway
      */
     public function createPayrexxGateway($order)
     {
