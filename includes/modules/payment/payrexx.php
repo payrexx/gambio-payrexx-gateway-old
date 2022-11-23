@@ -216,7 +216,7 @@ class payrexx_ORIGIN
     }
 
     /**
-     * Executed after order saved.
+     * Execute after order saved
      */
     function payment_action()
     {
@@ -224,12 +224,12 @@ class payrexx_ORIGIN
             return false;
         }
 
-        $orders_id = $GLOBALS['insert_id'];
-        if (empty($orders_id)) {
+        $orderId = $GLOBALS['insert_id'];
+        if (empty($orderId)) {
             return false;
         }
 
-        $order = new order($orders_id);
+        $order = new order($orderId);
         try {
             $response = $this->createPayrexxGateway($order);
         } catch (\Payrexx\PayrexxException $e) {
@@ -237,14 +237,14 @@ class payrexx_ORIGIN
         }
 
         $_SESSION['payrexx_gateway_id'] = $response->getId();
-        $_SESSION['payrexx_gateway_referrenceId'] = $_SESSION['cartID'];
+        $_SESSION['payrexx_gateway_referrenceId'] = $orderId;
         $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
 
         xtc_redirect($payrexxPaymentUrl);
     }
 
     /**
-     * Create Payrexx Gateway.
+     * Create Payrexx Gateway
      *
      * @param order $order
      * @return \Payrexx\Models\Response\Gateway
@@ -253,7 +253,7 @@ class payrexx_ORIGIN
     {
         $gateway = new \Payrexx\Models\Request\Gateway();
 
-        $orders_id = $order->info['orders_id'];
+        $orderId = $order->info['orders_id'];
         /**
          * success and failed url in case that merchant redirects to payment site instead of using the modal view
          */
@@ -297,9 +297,9 @@ class payrexx_ORIGIN
         $gateway->setSkipResultPage(true);
 
         if (empty(MODULE_PAYMENT_PAYREXX_PREFIX)) {
-            $gateway->setReferenceId($orders_id);
+            $gateway->setReferenceId($orderId);
         } else {
-            $gateway->setReferenceId(MODULE_PAYMENT_PAYREXX_PREFIX . '_' . $orders_id);
+            $gateway->setReferenceId(MODULE_PAYMENT_PAYREXX_PREFIX . '_' . $orderId);
         }
 
         if (!empty(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID)) {
@@ -316,7 +316,7 @@ class payrexx_ORIGIN
         $gateway->addField('country', $order->billing['country']['iso_code_2']);
         $gateway->addField('phone', $order->customer['telephone']);
         $gateway->addField('email', $order->customer['email_address']);
-        $gateway->addField('custom_field_1', $orders_id, 'Gambio Order ID');
+        $gateway->addField('custom_field_1', $orderId, 'Gambio Order ID');
 
         $payrexx = $this->getInterface();
         $response = $payrexx->create($gateway);
@@ -388,7 +388,6 @@ class payrexx_ORIGIN
 
         // shipping
         if (isset($order->info['pp_shipping']) && $order->info['pp_shipping'] > 0) {
-
             $basketItems[] = [
                 'name' => [
                     2 => $order->info['shipping_method'],
@@ -447,7 +446,7 @@ class payrexx_ORIGIN
     {
         try {
             if(isset($_GET['payrexx_success'])) {
-                $_SESSION['payrexx_gateway_referrenceId'] = new IdType((int)$GLOBALS['insert_id']);
+                $_SESSION['payrexx_gateway_referrenceId'] = $GLOBALS['insert_id'];
                 $this->_checkGatewayResponse();
             } else {
                 $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
