@@ -261,7 +261,7 @@ class payrexx_ORIGIN
         $basket = $this->collectBasketData($order);
         $basketAmount = 0;
         foreach ($basket as $basketItem) {
-            $basketAmount += (float) ($basketItem['amount']);
+            $basketAmount += (float) ($basketItem['quantity'] * $basketItem['amount']);
         }
 
         // Purpose
@@ -282,7 +282,7 @@ class payrexx_ORIGIN
         $failedUrl = xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL');
         $cancelUrl = xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL');
 
-        $gateway->setAmount((int)$totalAmount);
+        $gateway->setAmount($totalAmount);
         $gateway->setCurrency($currency);
 
         $gateway->setSuccessRedirectUrl($successUrl);
@@ -352,7 +352,7 @@ class payrexx_ORIGIN
                     2 => $item['checkout_information']
                 ],
                 'quantity' => (int) $item['qty'],
-                'amount' => ($item['qty'] * $price) * 100,
+                'amount' => $price * 100,
             ];
         }
 
