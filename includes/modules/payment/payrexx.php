@@ -299,7 +299,6 @@ class payrexx_ORIGIN
 
         $gateway->setSkipResultPage(true);
 
-        $gateway->addField('title', '');
         $gateway->addField('forename', $order->billing['firstname']);
         $gateway->addField('surname', $order->billing['lastname']);
         $gateway->addField('company', $order->billing['company']);
