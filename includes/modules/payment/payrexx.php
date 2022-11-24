@@ -254,57 +254,50 @@ class payrexx_ORIGIN
         $gateway = new \Payrexx\Models\Request\Gateway();
 
         $orderId = $order->info['orders_id'];
-        /**
-         * success and failed url in case that merchant redirects to payment site instead of using the modal view
-         */
-        $gateway->setSuccessRedirectUrl(
-            xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_success=1', 'SSL')
-        );
-        $gateway->setFailedRedirectUrl(
-            xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL')
-        );
-        $gateway->setCancelRedirectUrl(
-            xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL')
-        );
-
-        $currency = $order->info['currency'];
+        $currency = $order->info['currency'] ?? 'USD';
         $totalAmount = $order->info['pp_total'] * 100;
 
-
+        // Basket
         $basket = $this->collectBasketData($order);
-
         $basketAmount = 0;
         foreach ($basket as $basketItem) {
             $basketAmount += (float) ($basketItem['amount']);
         }
 
-        $purpose = [];
+        // Purpose
+        $purpose = null;
         if (round($basketAmount) !== round($totalAmount)) {
-            $purpose = $this->createPurposeByOrder($basket);
+            $purpose = $this->createPurposeByOrder($order);
             $basket = [];
         }
 
-        $gateway->setPurpose($purpose);
-        $gateway->setBasket($basket);
+        // Reference
+        $referenceId = $orderId;
+        if (!empty(MODULE_PAYMENT_PAYREXX_PREFIX)) {
+            $referenceId = MODULE_PAYMENT_PAYREXX_PREFIX . '_' . $orderId;
+        }
+
+        // Redirect URL
+        $successUrl = xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_success=1', 'SSL');
+        $failedUrl = xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL');
+        $cancelUrl = xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL');
+
         $gateway->setAmount((int)$totalAmount);
-
-        if ($currency == "") {
-            $currency = "USD";
-        }
-
         $gateway->setCurrency($currency);
+
+        $gateway->setSuccessRedirectUrl($successUrl);
+        $gateway->setFailedRedirectUrl($failedUrl);
+        $gateway->setCancelRedirectUrl($cancelUrl);
+
         $gateway->setPsp([]);
+
+        $gateway->setReferenceId($referenceId);
+        $gateway->setValidity(15);
+
+        $gateway->setBasket($basket);
+        $gateway->setPurpose($purpose);
+
         $gateway->setSkipResultPage(true);
-
-        if (empty(MODULE_PAYMENT_PAYREXX_PREFIX)) {
-            $gateway->setReferenceId($orderId);
-        } else {
-            $gateway->setReferenceId(MODULE_PAYMENT_PAYREXX_PREFIX . '_' . $orderId);
-        }
-
-        if (!empty(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID)) {
-            $gateway->setLookAndFeelProfile(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID);
-        }
 
         $gateway->addField('title', '');
         $gateway->addField('forename', $order->billing['firstname']);
@@ -317,6 +310,10 @@ class payrexx_ORIGIN
         $gateway->addField('phone', $order->customer['telephone']);
         $gateway->addField('email', $order->customer['email_address']);
         $gateway->addField('custom_field_1', $orderId, 'Gambio Order ID');
+
+        if (!empty(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID)) {
+            $gateway->setLookAndFeelProfile(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID);
+        }
 
         $payrexx = $this->getInterface();
         $response = $payrexx->create($gateway);
@@ -339,8 +336,10 @@ class payrexx_ORIGIN
             if (isset($item['tax']) && $item['tax'] > 0) {
                 // Find original price without tax
                 $price = $item['price'] / ( 1 + ($item['tax'] / 100) );
-                // Find product tax
-                $productTotalTax = $productTotalTax + (($item['price'] - $price) * 100);
+                // Find each product tax
+                $productTax = ($item['price'] - $price) * 100;
+                // Total tax of product
+                $productTotalTax = $productTotalTax + ($item['qty'] * $productTax);
             } else {
                 $price = $item['price'];
             }
@@ -425,7 +424,7 @@ class payrexx_ORIGIN
                 $totalItem['title'],
                 1,
                 'x',
-                number_format($totalItem['value'] / 100, 2, '.', ','),
+                number_format($totalItem['value'], 2, '.', ','),
             ]);
         }
         return implode('; ', $desc);
