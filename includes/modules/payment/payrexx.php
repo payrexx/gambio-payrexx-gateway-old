@@ -266,7 +266,7 @@ class payrexx_ORIGIN
 
         // Purpose
         $purpose = null;
-        if (round($basketAmount) !== round($totalAmount)) {
+        if ($basketAmount !== $totalAmount) {
             $purpose = $this->createPurposeByOrder($order);
             $basket = [];
         }
@@ -351,7 +351,7 @@ class payrexx_ORIGIN
                     2 => $item['checkout_information']
                 ],
                 'quantity' => (int) $item['qty'],
-                'amount' => $price * 100,
+                'amount' => round($price * 100),
             ];
         }
 
@@ -368,7 +368,7 @@ class payrexx_ORIGIN
                         2 => 'Tax',
                     ],
                     'quantity' => 1,
-                    'amount' => $taxAmount,
+                    'amount' => round($taxAmount),
                 ];
             }
 
@@ -379,7 +379,7 @@ class payrexx_ORIGIN
                         2 => $total['title'],
                     ],
                     'quantity' => 1,
-                    'amount' => $total['value'] * 100,
+                    'amount' => round($total['value'] * 100),
                 ];
             }
         }
@@ -391,7 +391,7 @@ class payrexx_ORIGIN
                     2 => $order->info['shipping_method'],
                 ],
                 'quantity' => 1,
-                'amount' => $order->info['pp_shipping'] * 100,
+                'amount' => round($order->info['pp_shipping'] * 100),
             ];
         }
 
@@ -402,7 +402,7 @@ class payrexx_ORIGIN
                     2 => 'Tax',
                 ],
                 'quantity' => 1,
-                'amount' => $order->info['tax'] * 100,
+                'amount' => round($order->info['tax'] * 100),
             ];
         }
 
