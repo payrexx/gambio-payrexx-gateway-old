@@ -267,7 +267,7 @@ class payrexx_ORIGIN
         // Purpose
         $purpose = null;
         if ($basketAmount !== $totalAmount) {
-            $purpose = $this->createPurposeByOrder($order);
+            $purpose = $this->createPurposeByBasket($basket);
             $basket = [];
         }
 
@@ -412,18 +412,18 @@ class payrexx_ORIGIN
     /**
      * Create puropose by order.
      *
-     * @param order $order
+     * @param array $basket
      * @return string
      */
-    public function createPurposeByOrder($order): string
+    public function createPurposeByBasket($basket): string
     {
         $desc = [];
-        foreach ($order->totals as $totalItem) {
+        foreach ($basket as $product) {
             $desc[] = implode(' ', [
-                $totalItem['title'],
-                1,
+                $product['name']['2'],
+                $product['quantity'],
                 'x',
-                number_format($totalItem['value'], 2, '.', ','),
+                number_format($product['amount'] / 100, 2, '.', ','),
             ]);
         }
         return implode('; ', $desc);
