@@ -261,7 +261,7 @@ class payrexx_ORIGIN
         $basket = $this->collectBasketData($order);
         $basketAmount = 0;
         foreach ($basket as $basketItem) {
-            $basketAmount += (float) ($basketItem['quantity'] * $basketItem['amount']);
+            $basketAmount += $basketItem['quantity'] * $basketItem['amount'];
         }
 
         // Purpose
