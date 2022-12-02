@@ -220,18 +220,15 @@ class payrexx_ORIGIN
      */
     function payment_action()
     {
+        global $insert_id;
+
+        $orderId = $insert_id;
         if (isset($_GET['payrexx_success'])) {
             return false;
         }
 
-        $orderId = $GLOBALS['insert_id'];
-        if (empty($orderId)) {
-            return false;
-        }
-
-        $order = new order($orderId);
         try {
-            $response = $this->createPayrexxGateway($order);
+            $response = $this->createPayrexxGateway($orderId);
         } catch (\Payrexx\PayrexxException $e) {
             return false;
         }
@@ -246,19 +243,17 @@ class payrexx_ORIGIN
     /**
      * Create Payrexx Gateway
      *
-     * @param order $order
+     * @param int $orderId
      * @return \Payrexx\Models\Response\Gateway
      */
-    public function createPayrexxGateway($order)
+    public function createPayrexxGateway($orderId)
     {
-        $gateway = new \Payrexx\Models\Request\Gateway();
-
-        $orderId = $order->info['orders_id'];
-        $currency = $order->info['currency'] ?? 'USD';
+        $order = new order($orderId);
+        $currency = $order->info['currency'];
         $totalAmount = $order->info['pp_total'] * 100;
 
         // Basket
-        $basket = $this->collectBasketData($order);
+        $basket = $this->collectBasketData();
         $basketAmount = 0;
         foreach ($basket as $basketItem) {
             $basketAmount += $basketItem['quantity'] * $basketItem['amount'];
@@ -282,6 +277,7 @@ class payrexx_ORIGIN
         $failedUrl = xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL');
         $cancelUrl = xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL');
 
+        $gateway = new \Payrexx\Models\Request\Gateway();
         $gateway->setAmount($totalAmount);
         $gateway->setCurrency($currency);
 
@@ -323,86 +319,60 @@ class payrexx_ORIGIN
     /**
      * Collect basket data
      *
-     * @param order $order
      * @return array
      */
-    public function collectBasketData($order): array
+    public function collectBasketData(): array
     {
-        $basketItems = [];
-        $productTotalTax = 0;
-        foreach ($order->products as $item) {
-            // check product price with tax
-            if (isset($item['tax']) && $item['tax'] > 0) {
-                // Find original price without tax
-                $price = $item['price'] / ( 1 + ($item['tax'] / 100) );
-                // Find each product tax
-                $productTax = ($item['price'] - $price) * 100;
-                // Total tax of product
-                $productTotalTax = $productTotalTax + ($item['qty'] * $productTax);
-            } else {
-                $price = $item['price'];
-            }
+        global $order;
 
+        $customerStatus = $_SESSION['customers_status'];
+        $addTaxToBasket = $customerStatus['customers_status_show_price_tax'] == 0 &&
+            $customerStatus['customers_status_add_tax_ot'] == 1;
+
+        $basketItems = [];
+        foreach ($order->products as $item) {
             $basketItems[] = [
-                'name' =>  [
+                'name' => [
                     2 => $item['name']
                 ],
                 'description' => [
                     2 => $item['checkout_information']
                 ],
                 'quantity' => (int) $item['qty'],
-                'amount' => round($price * 100),
+                'amount' => round($item['price'] * 100),
             ];
         }
 
-        foreach($order->totals as $total) {
-            // Tax
-            if (preg_match('/tax/', $total['title'])) {
-                $taxAmount = $total['value'] * 100;
-                // If tax is not equal to productTotaltax, shipping has tax
-                if ($taxAmount > $productTotalTax) {
-                    $taxAmount = $productTotalTax;
-                }
-                $basketItems[] = [
-                    'name' => [
-                        2 => 'Tax',
-                    ],
-                    'quantity' => 1,
-                    'amount' => round($taxAmount),
-                ];
-            }
-
-            // Discount
-            if (preg_match('/Discount|Coupons/', $total['title'])) {
-                $basketItems[] = [
-                    'name' => [
-                        2 => $total['title'],
-                    ],
-                    'quantity' => 1,
-                    'amount' => round($total['value'] * 100),
-                ];
-            }
-        }
-
-        // shipping
-        if (isset($order->info['pp_shipping']) && $order->info['pp_shipping'] > 0) {
-            $basketItems[] = [
-                'name' => [
-                    2 => $order->info['shipping_method'],
-                ],
-                'quantity' => 1,
-                'amount' => round($order->info['pp_shipping'] * 100),
-            ];
-        }
-
-        // tax
-        if (isset($order->info['tax']) && $order->info['tax'] > 0) {
+        // Tax
+        if ($addTaxToBasket && isset($order->info['tax']) && $order->info['tax'] > 0) {
             $basketItems[] = [
                 'name' => [
                     2 => 'Tax',
                 ],
                 'quantity' => 1,
                 'amount' => round($order->info['tax'] * 100),
+            ];
+        }
+
+        // Discount
+        if (isset($order->info['deduction']) && $order->info['deduction'] > 0) {
+            $basketItems[] = [
+                'name' => [
+                    2 => 'Discount',
+                ],
+                'quantity' => 1,
+                'amount' => -(round($order->info['deduction'] * 100)),
+            ];
+        }
+
+        // shipping
+        if (isset($order->info['shipping_cost']) && $order->info['shipping_cost'] > 0) {
+            $basketItems[] = [
+                'name' => [
+                    2 => 'Shipping',
+                ],
+                'quantity' => 1,
+                'amount' => round($order->info['shipping_cost'] * 100),
             ];
         }
 
