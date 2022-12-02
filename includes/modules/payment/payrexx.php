@@ -343,17 +343,6 @@ class payrexx_ORIGIN
             ];
         }
 
-        // Tax
-        if ($addTaxToBasket && isset($order->info['tax']) && $order->info['tax'] > 0) {
-            $basketItems[] = [
-                'name' => [
-                    2 => 'Tax',
-                ],
-                'quantity' => 1,
-                'amount' => round($order->info['tax'] * 100),
-            ];
-        }
-
         // Discount
         if (isset($order->info['deduction']) && $order->info['deduction'] > 0) {
             $basketItems[] = [
@@ -365,7 +354,7 @@ class payrexx_ORIGIN
             ];
         }
 
-        // shipping
+        // Shipping
         if (isset($order->info['shipping_cost']) && $order->info['shipping_cost'] > 0) {
             $basketItems[] = [
                 'name' => [
@@ -373,6 +362,17 @@ class payrexx_ORIGIN
                 ],
                 'quantity' => 1,
                 'amount' => round($order->info['shipping_cost'] * 100),
+            ];
+        }
+
+        // Tax
+        if ($addTaxToBasket && isset($order->info['tax']) && $order->info['tax'] > 0) {
+            $basketItems[] = [
+                'name' => [
+                    2 => 'Tax',
+                ],
+                'quantity' => 1,
+                'amount' => round($order->info['tax'] * 100),
             ];
         }
 
