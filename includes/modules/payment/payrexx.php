@@ -38,6 +38,11 @@ class payrexx_ORIGIN
     public $order_status;
 
     /**
+     * @var bool
+     */
+    public $tmpOrders = true;
+
+    /**
      * payrexx_ORIGIN constructor.
      */
     public function __construct()
@@ -210,9 +215,188 @@ class payrexx_ORIGIN
         return false;
     }
 
+    /**
+     * Execute after order saved
+     */
     function payment_action()
     {
-        return false;
+        global $insert_id;
+
+        $orderId = $insert_id;
+        if (isset($_GET['payrexx_success'])) {
+            return false;
+        }
+
+        try {
+            $response = $this->createPayrexxGateway($orderId);
+        } catch (\Payrexx\PayrexxException $e) {
+            return false;
+        }
+
+        $_SESSION['payrexx_gateway_id'] = $response->getId();
+        $_SESSION['payrexx_gateway_referrenceId'] = $orderId;
+        $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
+
+        xtc_redirect($payrexxPaymentUrl);
+    }
+
+    /**
+     * Create Payrexx Gateway
+     *
+     * @param int $orderId
+     * @return \Payrexx\Models\Response\Gateway
+     */
+    public function createPayrexxGateway($orderId)
+    {
+        $order = new order($orderId);
+        $currency = $order->info['currency'];
+        $totalAmount = $order->info['pp_total'] * 100;
+
+        // Basket
+        $basket = $this->collectBasketData();
+        $basketAmount = 0;
+        foreach ($basket as $basketItem) {
+            $basketAmount += $basketItem['quantity'] * $basketItem['amount'];
+        }
+
+        // Purpose
+        $purpose = null;
+        if ($basketAmount !== $totalAmount) {
+            $purpose = $this->createPurposeByBasket($basket);
+            $basket = [];
+        }
+
+        // Reference
+        $referenceId = $orderId;
+        if (!empty(MODULE_PAYMENT_PAYREXX_PREFIX)) {
+            $referenceId = MODULE_PAYMENT_PAYREXX_PREFIX . '_' . $orderId;
+        }
+
+        // Redirect URL
+        $successUrl = xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_success=1', 'SSL');
+        $failedUrl = xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL');
+        $cancelUrl = xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL');
+
+        $gateway = new \Payrexx\Models\Request\Gateway();
+        $gateway->setAmount($totalAmount);
+        $gateway->setCurrency($currency);
+
+        $gateway->setSuccessRedirectUrl($successUrl);
+        $gateway->setFailedRedirectUrl($failedUrl);
+        $gateway->setCancelRedirectUrl($cancelUrl);
+
+        $gateway->setPsp([]);
+
+        $gateway->setReferenceId($referenceId);
+        $gateway->setValidity(15);
+
+        $gateway->setBasket($basket);
+        $gateway->setPurpose($purpose);
+
+        $gateway->setSkipResultPage(true);
+
+        $gateway->addField('forename', $order->billing['firstname']);
+        $gateway->addField('surname', $order->billing['lastname']);
+        $gateway->addField('company', $order->billing['company']);
+        $gateway->addField('street', $order->billing['street_address']);
+        $gateway->addField('postcode', $order->billing['postc  ode']);
+        $gateway->addField('place', $order->billing['city']);
+        $gateway->addField('country', $order->billing['country']['iso_code_2']);
+        $gateway->addField('phone', $order->customer['telephone']);
+        $gateway->addField('email', $order->customer['email_address']);
+        $gateway->addField('custom_field_1', $orderId, 'Gambio Order ID');
+
+        if (!empty(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID)) {
+            $gateway->setLookAndFeelProfile(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID);
+        }
+
+        $payrexx = $this->getInterface();
+        $response = $payrexx->create($gateway);
+
+        return $response;
+    }
+
+    /**
+     * Collect basket data
+     *
+     * @return array
+     */
+    public function collectBasketData(): array
+    {
+        global $order;
+
+        $customerStatus = $_SESSION['customers_status'];
+        $addTaxToBasket = $customerStatus['customers_status_show_price_tax'] == 0 &&
+            $customerStatus['customers_status_add_tax_ot'] == 1;
+
+        $basketItems = [];
+        foreach ($order->products as $item) {
+            $basketItems[] = [
+                'name' => [
+                    2 => $item['name']
+                ],
+                'description' => [
+                    2 => $item['checkout_information']
+                ],
+                'quantity' => (int) $item['qty'],
+                'amount' => round($item['price'] * 100),
+            ];
+        }
+
+        // Discount
+        if (isset($order->info['deduction']) && $order->info['deduction'] > 0) {
+            $basketItems[] = [
+                'name' => [
+                    2 => 'Discount',
+                ],
+                'quantity' => 1,
+                'amount' => -(round($order->info['deduction'] * 100)),
+            ];
+        }
+
+        // Shipping
+        if (isset($order->info['shipping_cost']) && $order->info['shipping_cost'] > 0) {
+            $basketItems[] = [
+                'name' => [
+                    2 => 'Shipping',
+                ],
+                'quantity' => 1,
+                'amount' => round($order->info['shipping_cost'] * 100),
+            ];
+        }
+
+        // Tax
+        if ($addTaxToBasket && isset($order->info['tax']) && $order->info['tax'] > 0) {
+            $basketItems[] = [
+                'name' => [
+                    2 => 'Tax',
+                ],
+                'quantity' => 1,
+                'amount' => round($order->info['tax'] * 100),
+            ];
+        }
+
+        return $basketItems;
+    }
+
+    /**
+     * Create puropose by order.
+     *
+     * @param array $basket
+     * @return string
+     */
+    public function createPurposeByBasket($basket): string
+    {
+        $desc = [];
+        foreach ($basket as $product) {
+            $desc[] = implode(' ', [
+                $product['name']['2'],
+                $product['quantity'],
+                'x',
+                number_format($product['amount'] / 100, 2, '.', ','),
+            ]);
+        }
+        return implode('; ', $desc);
     }
 
     /**
@@ -220,23 +404,7 @@ class payrexx_ORIGIN
      */
     public function before_process()
     {
-        if (isset($_GET['payrexx_success'])) {
-            return false;
-        }
-
-        $platformBaseUrl = trim(MODULE_PAYMENT_PAYREXX_PLATFORM);
-        try {
-            $payrexx = $this->getInterface();
-            $response = $payrexx->create($this->_createPayrexxGateway());
-        } catch (\Payrexx\PayrexxException $e) {
-            return false;
-        }
-
-        $_SESSION['payrexx_gateway_id'] = $response->getId();
-        $_SESSION['payrexx_gateway_referrenceId'] = $_SESSION['cartID'];
-        $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
-
-        xtc_redirect($payrexxPaymentUrl);
+       return false;
     }
 
     /**
@@ -246,7 +414,7 @@ class payrexx_ORIGIN
     {
         try {
             if(isset($_GET['payrexx_success'])) {
-                $_SESSION['payrexx_gateway_referrenceId'] = new IdType((int)$GLOBALS['insert_id']);
+                $_SESSION['payrexx_gateway_referrenceId'] = $GLOBALS['insert_id'];
                 $this->_checkGatewayResponse();
             } else {
                 $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
@@ -256,86 +424,6 @@ class payrexx_ORIGIN
         }
 
         return false;
-    }
-
-    /**
-     * Gets Payrexx Gateway.
-     *
-     * @return \Payrexx\Models\Request\Gateway
-     */
-    protected function _createPayrexxGateway() {
-        global $order;
-        $insertId = trim($_SESSION['cartID']); //new IdType((int)$GLOBALS['insert_id']);
-        $gateway = new \Payrexx\Models\Request\Gateway();
-
-        /**
-         * success and failed url in case that merchant redirects to payment site instead of using the modal view
-         */
-        $gateway->setSuccessRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_success=1', 'SSL'));
-        $gateway->setFailedRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL'));
-        $gateway->setCancelRedirectUrl(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL'));
-
-        $amount = floatval($order->info['total']);
-        if (!$_SESSION['customers_status']['customers_status_show_price_tax']) {
-            $amount += floatval($order->info['tax']);
-        }
-
-        // Round to 5 and format as cent
-        //$amount = 5 * round(($amount * 100) / 5);;
-        $amount = $amount * 100;
-
-        $currency = $order->info['currency'];
-
-        $productNames = [];
-        $basket = [];
-        foreach ($order->products as $item) {
-            $quantity = $item['qty'] > 1 ? $item['quantity'] . 'x ' : '';
-            $productNames[] = $quantity . $item['name'];
-
-            $basket[] = [
-                'name' => [
-                    1 => $item['name']
-                ],
-                'quantity' => $item['quantity'],
-                'amount' => $item['final_price'] * 100
-            ];
-        }
-
-        //$gateway->setBasket($basket);
-        $gateway->setAmount((int)$amount);
-        if ($currency == "") {
-            $currency = "USD";
-        }
-
-        $gateway->setCurrency($currency);
-
-        $gateway->setPurpose(implode(', ', $productNames));
-        $gateway->setPsp(array());
-        $gateway->setSkipResultPage(true);
-
-        if (empty(MODULE_PAYMENT_PAYREXX_PREFIX)) {
-            $gateway->setReferenceId($insertId);
-        } else {
-            $gateway->setReferenceId(MODULE_PAYMENT_PAYREXX_PREFIX . '_' . $insertId);
-        }
-
-        if (!empty(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID)) {
-            $gateway->setLookAndFeelProfile(MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID);
-        }
-
-        $gateway->addField($type = 'title', $value = '');
-        $gateway->addField($type = 'forename', $value = $order->billing['firstname']);
-        $gateway->addField($type = 'surname', $value = $order->billing['lastname']);
-        $gateway->addField($type = 'company', $value = $order->billing['company']);
-        $gateway->addField($type = 'street', $value = $order->billing['street_address']);
-        $gateway->addField($type = 'postcode', $value = $order->billing['postc  ode']);
-        $gateway->addField($type = 'place', $value = $order->billing['city']);
-        $gateway->addField($type = 'country', $value = $order->billing['country']['iso_code_2']);
-        $gateway->addField($type = 'phone', $value = $order->customer['telephone']);
-        $gateway->addField($type = 'email', $value = $order->customer['email_address']);
-        $gateway->addField($type = 'custom_field_1', $value = $insertId, $name = 'Gambio Order ID');
-
-        return $gateway;
     }
 
     /**
