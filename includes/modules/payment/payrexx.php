@@ -42,6 +42,16 @@ class payrexx_ORIGIN
      */
     public $tmpOrders = true;
 
+
+    /**
+     * Order status
+     */
+    const STATUS_REFUNDED = 'Payrexx Refunded';
+    const STATUS_PARTIALLY_REFUNDED = 'Payrexx Partially Refunded';
+    const STATUS_PENDING = 'Pending';
+    const STATUS_PROCESSING = 'Processing';
+    const STATUS_CANCELED = 'Canceled';
+
     /**
      * payrexx_ORIGIN constructor.
      */
@@ -112,6 +122,26 @@ class payrexx_ORIGIN
         $gateway->setId($id);
         try {
             $response = $payrexx->getOne($gateway);
+            return $response;
+        } catch (\Payrexx\PayrexxException $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Get Transaction by transaction id
+     *
+     * @param integer $id
+     * @return array|Transaction
+     */
+    public function getTransactionById($id)
+    {
+        $payrexx = $this->getInterface();
+        $transaction = new Transaction();
+        $transaction->setId($id);
+
+        try {
+            $response = $payrexx->getOne($transaction);
             return $response;
         } catch (\Payrexx\PayrexxException $e) {
             return [];
@@ -413,15 +443,11 @@ class payrexx_ORIGIN
     public function after_process()
     {
         try {
-            if(isset($_GET['payrexx_success'])) {
-                $_SESSION['payrexx_gateway_referrenceId'] = $GLOBALS['insert_id'];
-                $this->_checkGatewayResponse();
-            } else {
+            if(!isset($_GET['payrexx_success'])) {
                 $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
                 xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'));
             }
-        } catch (\Payrexx\PayrexxException $e) {
-        }
+        } catch (\Payrexx\PayrexxException $e) {}
 
         return false;
     }
@@ -511,6 +537,58 @@ class payrexx_ORIGIN
             xtc_db_query($install_query);
             $sort_order++;
         }
+        $this->addNewOrderStatus();
+    }
+
+    /**
+     * Add new order status
+     */
+    public function addNewOrderStatus()
+    {
+        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+        $activeLanguages = $this->_xtc_get_languages();
+        foreach ([static::STATUS_REFUNDED, static::STATUS_PARTIALLY_REFUNDED] as $statusName) {
+            $newOrdersStatusId = $db->select('MAX(`orders_status_id`) + 1 As newOrdersStatusId')
+                ->get('orders_status')
+                ->result_array();
+            $newOrdersStatusId = $newOrdersStatusId[0]['newOrdersStatusId'];
+            foreach ($activeLanguages as $lang) {
+                $refundId = $this->isStatusExistInDb($lang['languages_id'], $statusName);
+                if (!$refundId) {
+                    $db->insert(
+                        'orders_status',
+                        [
+                            'orders_status_id' => $newOrdersStatusId,
+                            'language_id' => $lang['languages_id'],
+                            'orders_status_name' => $statusName,
+                            'color' => '2196F3',
+                        ]
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Check order status exist
+     *
+     * @param integer $langId
+     * @param string $statusName
+     * @return bool|int
+     */
+    public function isStatusExistInDb($langId, $statusName)
+    {
+        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+        $orderStatus = $db->select('orders_status_id')
+            ->where('language_id', $langId)
+            ->where('orders_status_name', $statusName)
+            ->get('orders_status')
+            ->result_array();
+        $orderStatusId = $orderStatus[0]['orders_status_id'];
+        if ((int) $orderStatusId > 0) {
+            return $orderStatusId;
+        }
+        return false;
     }
 
     /**
@@ -652,6 +730,139 @@ class payrexx_ORIGIN
     }
     private function getInterface() {
         return new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
+    }
+
+    /**
+     * Handle webhook data
+     */
+    public function handleTransactionStatus()
+    {
+        $data = $_POST;
+        if (empty($data)) {
+            throw new \Exception('Payrexx Webhook Data incomplete');
+        }
+        $transaction = $data['transaction'];
+        $orderId = end(explode('_', $transaction['invoice']['referenceId']));
+
+        if (!$orderId || !$transaction['status'] || !$transaction['id']) {
+            throw new \Exception('Payrexx Webhook Data incomplete');
+        }
+
+        $order = new order($orderId);
+        if (!$order) {
+            throw new \Exception('Malicious request');
+        }
+
+        $payrexxTransaction = $this->getTransactionById($transaction['id']);
+        if ($payrexxTransaction->getStatus() !== $transaction['status']) {
+            throw new \Exception('Fraudulent transaction status');
+        }
+
+        // old status
+        switch ($order->orders_status) {
+            case 1:
+                $oldStatus = static::STATUS_PENDING;
+                break;
+            case 2:
+                $oldStatus = static::STATUS_PROCESSING;
+                break;
+            case 99:
+                $oldStatus = static::STATUS_CANCELED;
+                break;
+            default:
+                /**
+                 * @var OrderWriteServiceInterface $orderWriteService
+                 */
+                $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+                $orderStatus = $db->select('orders_status_name')
+                    ->where('language_id', 1) // En
+                    ->where('orders_status_id', $order->orders_status)
+                    ->get('orders_status')
+                    ->result_array();
+                $oldStatus = $orderStatus[0]['orders_status_name'];
+        }
+
+        $transactionStatus = $transaction['status'];
+        switch ($transactionStatus) {
+            case Transaction::WAITING:
+                $newStatusId = 1; // Pending
+                $newStatus = static::STATUS_PENDING;
+                break;
+            case Transaction::CONFIRMED:
+                $newStatusId = 2; // Processing
+                $newStatus = static::STATUS_PROCESSING;
+                break;
+            case Transaction::CANCELLED:
+            case Transaction::DECLINED:
+            case Transaction::ERROR:
+            case Transaction::EXPIRED:
+                $newStatusId = 99; // Canceled
+                $newStatus = static::STATUS_CANCELED;
+                break;
+            case Transaction::REFUNDED:
+            case Transaction::PARTIALLY_REFUNDED:
+                $orderStatusId = $this->isStatusExistInDb(1, $transactionStatus);
+                if ($orderStatusId) {
+                    $newStatusId = $orderStatusId;
+                } else {
+                    $this->addNewOrderStatus(); //
+                    $newStatusId = $this->isStatusExistInDb(1, $transactionStatus);
+                }
+                $newStatus = $transactionStatus == Transaction::REFUNDED
+                    ? static::STATUS_REFUNDED
+                    : static::STATUS_PARTIALLY_REFUNDED;
+                break;
+            default:
+                throw new \Exception($transactionStatus . ' case not implemented.');
+        }
+
+        // update order status.
+        if ($this->isAllowedToChangeStatus($oldStatus, $newStatus)) {
+            /**
+             * @var OrderWriteServiceInterface $orderWriteService
+             */
+            $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
+            //update status and customer-history
+            $orderWriteService->updateOrderStatus(
+                $orderId,
+                new IntType((int)$newStatusId),
+                new StringType($newStatus . ' Status updated by Payrexx Webhook'),
+                new BoolType(false)
+            );
+        } else {
+            throw new \Exception('Status transition not allowed from ' . $oldStatus);
+        }
+    }
+
+    /**
+     * Check the transition is allowed or not
+     *
+     * @param string $oldStatus
+     * @param string $newStatus
+     * @return bool
+     */
+    private function isAllowedToChangeStatus($oldStatus, $newStatus)
+    {
+        switch ($oldStatus) {
+            case static::STATUS_PENDING:
+                return !in_array($newStatus, [
+                    static::STATUS_REFUNDED,
+                    static::STATUS_PARTIALLY_REFUNDED,
+                ]);
+            case static::STATUS_PROCESSING:
+                return in_array($newStatus, [
+                    static::STATUS_REFUNDED,
+                    static::STATUS_PARTIALLY_REFUNDED,
+                ]);
+            case static::STATUS_CANCELED:
+            case static::STATUS_REFUNDED:
+                return false;
+            case static::STATUS_PARTIALLY_REFUNDED:
+                return in_array($newStatus, [
+                    static::STATUS_PARTIALLY_REFUNDED,
+                ]);
+        }
+        return false;
     }
 }
 
