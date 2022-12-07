@@ -34,10 +34,6 @@
     define('MODULE_PAYMENT_PAYREXX_API_KEY_DESC', 'Paste here your API key from the Integrations page of your Payrexx merchant backend.');
     define('MODULE_PAYMENT_PAYREXX_PREFIX_TITLE', 'Prefix');
     define('MODULE_PAYMENT_PAYREXX_PREFIX_DESC', 'This is necessary when you use more than one shop with only one Payrexx account.');
-    define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_TITLE_TXT', 'Module Title');
-    define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_DESC_TXT', 'This controls the Module Title on the checkout page for');
-    define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_TITLE_TXT', 'Module Desciption');
-    define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_DESC_TXT', 'This controls the Module Description on the checkout page for');
     define('MODULE_PAYMENT_PAYREXX_USE_MODAL_TITLE', 'Use Modal');
     define('MODULE_PAYMENT_PAYREXX_USE_MODAL_DESC', 'Do you want to open Payrexx payment option in Modal?');
     define('MODULE_PAYMENT_PAYREXX_LOOK_AND_FEEL_ID_TITLE', 'Look&Feel Profile ID');
@@ -48,3 +44,8 @@
     define('MODULE_PAYMENT_PAYREXX_PLATFORM_TITLE', 'Platform');
     $platforms = '<li>payrexx.com</li><li>zahls.ch</li><li>spenden-grunliberale.ch</li><li>deinshop.online</li><li>swissbrain-pay.ch</li><li>loop-pay.com</li><li>shop-and-pay.com</li><li>ideal-pay.ch</li><li>payzzter.com</li>';
     define('MODULE_PAYMENT_PAYREXX_PLATFORM_DESC', 'Choose the platform provider from the list:' . $platforms);
+
+    define('MODULE_PAYMENT_PAYREXX_CHECKOUT_NAME_TITLE', 'Module Title');
+    define('MODULE_PAYMENT_PAYREXX_CHECKOUT_NAME_DESC', 'This controls the Module Title on the checkout page');
+    define('MODULE_PAYMENT_PAYREXX_CHECKOUT_DESCRIPTION_TITLE', 'Module Desciption');
+    define('MODULE_PAYMENT_PAYREXX_CHECKOUT_DESCRIPTION_DESC', 'This controls the Module Description on the checkout page');

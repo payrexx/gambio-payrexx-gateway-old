@@ -127,17 +127,15 @@ class payrexx_ORIGIN
             $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_CANCEL);
         }
 
-        if ($this->_validateSignature()) {
-            $selection = [
-                'id' => $this->code,
-                'module' => constant('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($_SESSION['language_code'])),
-                'description' => $this->_getDescription(),
-            ];
+        if (!$this->_validateSignature()) return false;
+        $selection = [
+            'id' => $this->code,
+//            'module' => constant('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($_SESSION['language_code'])),
+            'module' => MODULE_PAYMENT_PAYREXX_CHECKOUT_NAME,
+            'description' => $this->_getDescription(),
+        ];
 
-            return $selection;
-        }
-
-        return false;
+        return $selection;
     }
 
     /**
@@ -145,10 +143,10 @@ class payrexx_ORIGIN
      */
     protected function _getDescription()
     {
-        $description = constant('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($_SESSION['language_code']));
+        $description = MODULE_PAYMENT_PAYREXX_CHECKOUT_DESCRIPTION;
         $description .= '<style> .payrexx .payment-module-icon img{background: initial !important;}</style><br>';
         foreach ($this->getPaymentMethods() as $method) {
-            if (constant(MODULE_PAYMENT_PAYREXX_ . strtoupper($method)) === 'true') {
+            if (constant('MODULE_PAYMENT_PAYREXX_' . strtoupper($method)) === 'true') {
                 $description .= $this->_getPaymentMethodIcon($method);
             }
         }
@@ -613,25 +611,23 @@ class payrexx_ORIGIN
         /**
          * Creating text fields for each language.
          */
-        $availableLanguages = $this->_xtc_get_languages();
-        if(!empty($availableLanguages)) {
-            foreach ($availableLanguages as $language) {
-                define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($language['code']) . '_TITLE', MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_TITLE_TXT . ' ' . $language['name']);
-                define('MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_' . strtoupper($language['code']) . '_DESC', MODULE_PAYMENT_PAYREXX_DISPLAY_NAME_DESC_TXT . ' ' . $language['name']);
-                $config['DISPLAY_NAME_' . strtoupper($language['code'])] = ['value' => $this->title, 'type' => 'text'];
+//        $availableLanguages = $this->_xtc_get_languages();
+//        if(!empty($availableLanguages)) {
+//            foreach ($availableLanguages as $language) {
+//                $config['DISPLAY_NAME_' . strtoupper($language['code'])] = ['value' => $this->title, 'type' => 'text'];
+//                $config['DISPLAY_DESCRIPTION_' . strtoupper($language['code'])] = ['value' => $this->info, 'type' => 'text'];
+//            }
+//        }
 
-                define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($language['code']) . '_TITLE', MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_TITLE_TXT . ' ' . $language['name']);
-                define('MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_' . strtoupper($language['code']) . '_DESC', MODULE_PAYMENT_PAYREXX_DISPLAY_DESCRIPTION_DESC_TXT . ' ' . $language['name']);
-                $config['DISPLAY_DESCRIPTION_' . strtoupper($language['code'])] = ['value' => $this->info, 'type' => 'text'];
-            }
-        }
+        $config['CHECKOUT_NAME'] = ['value' => $this->title, 'type' => 'text'];
+        $config['CHECKOUT_DESCRIPTION'] = ['value' => $this->info, 'type' => 'text'];
 
         /**
          * Creating checkbox for each payment method.
          */
         foreach ($this->getPaymentMethods() as $method) {
             define('MODULE_PAYMENT_PAYREXX_' . strtoupper($method) . '_TITLE', str_replace('_', ' ', ucfirst($method)));
-            define('MODULE_PAYMENT_PAYREXX_' . strtoupper($method) . '_DESC', MODULE_PAYMENT_PAYREXX_METHOD_DESC . ucfirst($method) .'?');
+            define('MODULE_PAYMENT_PAYREXX_' . strtoupper($method) . '_DESC', 'Accept payment by ' . ucfirst($method) .'?');
             $config[strtoupper($method)] = ['value' => 'False','type'  => 'switcher'];
         }
 
