@@ -738,11 +738,9 @@ class payrexx_ORIGIN
     public function handleTransactionStatus()
     {
         $data = $_POST;
-        if (empty($data)) {
-            throw new \Exception('Payrexx Webhook Data incomplete');
-        }
+
         $transaction = $data['transaction'];
-        $orderId = end(explode('_', $transaction['invoice']['referenceId']));
+        $orderId = end(explode('_', $transaction['referenceId']));
 
         if (!$orderId || !$transaction['status'] || !$transaction['id']) {
             throw new \Exception('Payrexx Webhook Data incomplete');
@@ -759,29 +757,17 @@ class payrexx_ORIGIN
         }
 
         // old status
-        switch ($order->orders_status) {
-            case 1:
-                $oldStatus = static::STATUS_PENDING;
-                break;
-            case 2:
-                $oldStatus = static::STATUS_PROCESSING;
-                break;
-            case 99:
-                $oldStatus = static::STATUS_CANCELED;
-                break;
-            default:
-                /**
-                 * @var OrderWriteServiceInterface $orderWriteService
-                 */
-                $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
-                $orderStatus = $db->select('orders_status_name')
-                    ->where('language_id', 1) // En
-                    ->where('orders_status_id', $order->orders_status)
-                    ->get('orders_status')
-                    ->result_array();
-                $oldStatus = $orderStatus[0]['orders_status_name'];
-        }
+        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+        $orderStatus = $db->select('orders_status.orders_status_name')
+            ->join('orders_status', 'orders.orders_status = orders_status.orders_status_id')
+            ->where('orders_status.language_id', 1) // En
+            ->where('orders.orders_id', $orderId )
+            ->limit(1)
+            ->get('orders')
+            ->result_array();
+        $oldStatus = $orderStatus[0]['orders_status_name'];
 
+        // status mapping
         $transactionStatus = $transaction['status'];
         switch ($transactionStatus) {
             case Transaction::WAITING:
@@ -816,7 +802,7 @@ class payrexx_ORIGIN
                 throw new \Exception($transactionStatus . ' case not implemented.');
         }
 
-        // update order status.
+        // check the status transition to change.
         if ($this->isAllowedToChangeStatus($oldStatus, $newStatus)) {
             /**
              * @var OrderWriteServiceInterface $orderWriteService
@@ -824,7 +810,7 @@ class payrexx_ORIGIN
             $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
             //update status and customer-history
             $orderWriteService->updateOrderStatus(
-                $orderId,
+                new IdType($orderId),
                 new IntType((int)$newStatusId),
                 new StringType($newStatus . ' Status updated by Payrexx Webhook'),
                 new BoolType(false)
