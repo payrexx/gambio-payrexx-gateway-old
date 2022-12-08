@@ -261,7 +261,7 @@ class payrexx_ORIGIN
 
         // Purpose
         $purpose = null;
-        if ($basketAmount !== $totalAmount) {
+        if (round($basketAmount) !== round($totalAmount)) {
             $purpose = $this->createPurposeByBasket($basket);
             $basket = [];
         }
