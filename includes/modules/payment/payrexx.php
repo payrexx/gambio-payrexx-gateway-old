@@ -787,16 +787,21 @@ class payrexx_ORIGIN
                 break;
             case Transaction::REFUNDED:
             case Transaction::PARTIALLY_REFUNDED:
-                $orderStatusId = $this->isStatusExistInDb(1, $transactionStatus);
-                if ($orderStatusId) {
-                    $newStatusId = $orderStatusId;
-                } else {
-                    $this->addNewOrderStatus(); //
-                    $newStatusId = $this->isStatusExistInDb(1, $transactionStatus);
-                }
-                $newStatus = $transactionStatus == Transaction::REFUNDED
+                $newStatus = ($transactionStatus == Transaction::REFUNDED)
                     ? static::STATUS_REFUNDED
                     : static::STATUS_PARTIALLY_REFUNDED;
+                $newStatusId = $this->isStatusExistInDb(1, $newStatus);
+                if (!$newStatusId) {
+                    $this->addNewOrderStatus();
+                    $newStatusId = $this->isStatusExistInDb(1, $newStatus);
+                }
+                if (
+                    $newStatus == static::STATUS_PARTIALLY_REFUNDED &&
+                    $transaction['invoice']['originalAmount'] == $transaction['invoice']['refundedAmount']
+                ) {
+                    $newStatus = static::STATUS_REFUNDED;
+                    $newStatusId = $this->isStatusExistInDb(1, $newStatus);
+                }
                 break;
             default:
                 throw new \Exception($transactionStatus . ' case not implemented.');
@@ -845,7 +850,8 @@ class payrexx_ORIGIN
                 return false;
             case static::STATUS_PARTIALLY_REFUNDED:
                 return in_array($newStatus, [
-                    static::STATUS_PARTIALLY_REFUNDED,
+                    static::STATUS_REFUNDED,
+                    static::STATUS_PARTIALLY_REFUNDED
                 ]);
         }
         return false;
