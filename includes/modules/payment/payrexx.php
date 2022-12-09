@@ -262,11 +262,7 @@ class payrexx_ORIGIN
         } catch (\Payrexx\PayrexxException $e) {
             return false;
         }
-
-        $_SESSION['payrexx_gateway_id'] = $response->getId();
-        $_SESSION['payrexx_gateway_referrenceId'] = $orderId;
         $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
-
         xtc_redirect($payrexxPaymentUrl);
     }
 
@@ -450,53 +446,6 @@ class payrexx_ORIGIN
         } catch (\Payrexx\PayrexxException $e) {}
 
         return false;
-    }
-
-    /**
-     * Gets transaction and check response
-     */
-    protected function _checkGatewayResponse() {
-        $insertId = trim($_SESSION['payrexx_gateway_referrenceId']);
-        $gateway = $this->getGatewayById($_SESSION['payrexx_gateway_id']);
-
-        if ($gateway && $invoices = $gateway->getInvoices()) {
-            $status = $invoices[0]['transactions'][0]['status'];
-
-            /**
-             * Order Statuses
-             *  0 => Not validated
-             *  1 => Pending
-             *  2 => Processing
-             *  3 => Dispatched
-             *  99 => Cancelled
-             *  149 => Invoice created
-             */
-            switch ($status) {
-                case Transaction::WAITING:
-                case Transaction::AUTHORIZED:
-                case Transaction::RESERVED:
-                    $this->_updateOrderStatus($insertId, 1);
-                    break;
-                case Transaction::CONFIRMED:
-                    ;
-                    $this->_updateOrderStatus($insertId, 2);
-                    break;
-                case Transaction::CANCELLED:
-                case Transaction::ERROR:
-                case Transaction::EXPIRED:
-                default:
-                    $this->_updateOrderStatus($insertId, 99);
-                    break;
-            }
-        }
-    }
-
-    protected function _updateOrderStatus($insertId, $statusId) {
-        if(!empty($insertId)) {
-            xtc_db_query(
-                "UPDATE " . TABLE_ORDERS . " SET orders_status={$statusId} WHERE orders_id='{$insertId}'"
-            );
-        }
     }
 
     /**
@@ -841,17 +790,10 @@ class payrexx_ORIGIN
                     static::STATUS_PARTIALLY_REFUNDED,
                 ]);
             case static::STATUS_PROCESSING:
-                return in_array($newStatus, [
-                    static::STATUS_REFUNDED,
-                    static::STATUS_PARTIALLY_REFUNDED,
-                ]);
-            case static::STATUS_CANCELED:
-            case static::STATUS_REFUNDED:
-                return false;
             case static::STATUS_PARTIALLY_REFUNDED:
                 return in_array($newStatus, [
                     static::STATUS_REFUNDED,
-                    static::STATUS_PARTIALLY_REFUNDED
+                    static::STATUS_PARTIALLY_REFUNDED,
                 ]);
         }
         return false;
