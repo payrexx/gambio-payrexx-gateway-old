@@ -231,7 +231,6 @@ class payrexx_ORIGIN
     {
         if (isset($_GET['payrexx_failed'])) {
             $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
-            $this->_checkGatewayResponse();
         }
 
         return false;
