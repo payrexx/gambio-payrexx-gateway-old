@@ -153,9 +153,43 @@ class payrexx_ORIGIN
      */
     public function selection()
     {
-        if (isset($_GET['payrexx_cancel'])) {
-            $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_CANCEL);
-        }
+        try {
+            // Process the cancel/failed orders.
+            if (
+                (
+                    isset($_GET['payrexx_cancel']) ||
+                    isset($_GET['payrexx_failed'])
+                ) &&
+                isset($_SESSION['payrexx_gateway_id'])
+            ) {
+                $gateway = $this->getGatewayById($_SESSION['payrexx_gateway_id']);
+                $orderId = $_SESSION['payrexx_gateway_referrenceId'];
+                if ($gateway && $invoices = $gateway->getInvoices()) {
+                    $status = $invoices[0]['transactions'][0]['status'];
+                    if (in_array($status, 
+                        [
+                            Transaction::CANCELLED,
+                            Transaction::DECLINED,
+                            Transaction::ERROR,
+                            Transaction::EXPIRED
+                        ]
+                    )) {
+                        $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
+                        //update status and customer-history
+                        $orderWriteService->updateOrderStatus(
+                            new IdType($orderId),
+                            new IntType((int) 99),
+                            new StringType('Cancelled status updated by payrexx webhook'),
+                            new BoolType(false)
+                        );
+                    }
+                    unset($_SESSION['payrexx_gateway_id']);
+                    unset($_SESSION['payrexx_gateway_referrenceId']);
+                }
+                $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
+                xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'));
+            }
+        } catch(Exception $e) {}
 
         if ($this->_validateSignature()) {
             $selection = [
@@ -679,6 +713,7 @@ class payrexx_ORIGIN
 
         return $paymentMethods;
     }
+
     private function getInterface() {
         return new \Payrexx\Payrexx(MODULE_PAYMENT_PAYREXX_INSTANCE_NAME, MODULE_PAYMENT_PAYREXX_API_KEY, '', trim(MODULE_PAYMENT_PAYREXX_PLATFORM));
     }
@@ -768,7 +803,7 @@ class payrexx_ORIGIN
             $orderWriteService->updateOrderStatus(
                 new IdType($orderId),
                 new IntType((int)$newStatusId),
-                new StringType($newStatus . ' Status updated by Payrexx Webhook'),
+                new StringType($newStatus . ' status updated by payrexx webhook'),
                 new BoolType(false)
             );
         } else {
