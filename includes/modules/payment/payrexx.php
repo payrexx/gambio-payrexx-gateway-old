@@ -261,6 +261,9 @@ class payrexx_ORIGIN
         } catch (\Payrexx\PayrexxException $e) {
             return false;
         }
+        // To use cancel/failed purpose.
+        $_SESSION['payrexx_gateway_id'] = $response->getId();
+        $_SESSION['payrexx_gateway_referrenceId'] = $orderId;
         $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
         xtc_redirect($payrexxPaymentUrl);
     }
