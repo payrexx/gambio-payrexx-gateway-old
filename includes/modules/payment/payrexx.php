@@ -116,15 +116,36 @@ class payrexx_ORIGIN
         }
     }
 
-    public function getGatewayById($id) {
+    /**
+     * Get transaction by gatewayid
+     *
+     * @param int $id payrexx gatewayid
+     * @return Transaction|null
+     */
+    public function getTransactionByGateway($id)
+    {
         $payrexx = $this->getInterface();
         $gateway = new \Payrexx\Models\Request\Gateway();
         $gateway->setId($id);
         try {
-            $response = $payrexx->getOne($gateway);
-            return $response;
+            $payrexxGateway = $payrexx->getOne($gateway);
+
+            if (!in_array($payrexxGateway->getStatus(), [Transaction::CONFIRMED, Transaction::WAITING])) {
+                return null;
+            }
+            $invoices = $payrexxGateway->getInvoices();
+
+            if (!$invoices || !$invoice = $invoices[0]) {
+                return null;
+            }
+
+            if (!$transactions = $invoice['transactions']) {
+                return null;
+            }
+
+            return $this->getTransactionById(end($transactions)['id']);
         } catch (\Payrexx\PayrexxException $e) {
-            return [];
+            return null;
         }
     }
 
@@ -153,43 +174,9 @@ class payrexx_ORIGIN
      */
     public function selection()
     {
-        try {
-            // Process the cancel/failed orders.
-            if (
-                (
-                    isset($_GET['payrexx_cancel']) ||
-                    isset($_GET['payrexx_failed'])
-                ) &&
-                isset($_SESSION['payrexx_gateway_id'])
-            ) {
-                $gateway = $this->getGatewayById($_SESSION['payrexx_gateway_id']);
-                $orderId = $_SESSION['payrexx_gateway_referrenceId'];
-                if ($gateway && $invoices = $gateway->getInvoices()) {
-                    $status = $invoices[0]['transactions'][0]['status'];
-                    if (in_array($status, 
-                        [
-                            Transaction::CANCELLED,
-                            Transaction::DECLINED,
-                            Transaction::ERROR,
-                            Transaction::EXPIRED
-                        ]
-                    )) {
-                        $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
-                        //update status and customer-history
-                        $orderWriteService->updateOrderStatus(
-                            new IdType($orderId),
-                            new IntType((int) 99),
-                            new StringType('Cancelled status updated by payrexx webhook'),
-                            new BoolType(false)
-                        );
-                    }
-                    unset($_SESSION['payrexx_gateway_id']);
-                    unset($_SESSION['payrexx_gateway_referrenceId']);
-                }
-                $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
-                xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'));
-            }
-        } catch(Exception $e) {}
+        if (isset($_GET['payrexx_cancel'])) {
+            $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_CANCEL);
+        }
 
         if ($this->_validateSignature()) {
             $selection = [
@@ -336,8 +323,8 @@ class payrexx_ORIGIN
 
         // Redirect URL
         $successUrl = xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_success=1', 'SSL');
-        $failedUrl = xtc_href_link(FILENAME_CHECKOUT_CONFIRMATION, 'payrexx_failed=1', 'SSL');
-        $cancelUrl = xtc_href_link(FILENAME_CHECKOUT_PAYMENT, 'payrexx_cancel=1', 'SSL');
+        $failedUrl = xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_failed=1', 'SSL');
+        $cancelUrl = xtc_href_link(FILENAME_CHECKOUT_PROCESS, 'payrexx_cancel=1', 'SSL');
 
         $gateway = new \Payrexx\Models\Request\Gateway();
         $gateway->setAmount($totalAmount);
@@ -474,14 +461,42 @@ class payrexx_ORIGIN
      */
     public function after_process()
     {
-        try {
-            if(!isset($_GET['payrexx_success'])) {
-                $_SESSION['gm_error_message'] = urlencode(MODULE_PAYMENT_PAYREXX_FAILED);
-                xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'));
-            }
-        } catch (\Payrexx\PayrexxException $e) {}
+        if (!isset($_GET['payrexx_cancel']) && !isset($_GET['payrexx_failed'])) {
+            return false;
+        }
 
-        return false;
+        // Process the cancel/failed orders.
+        $gatewayId = $_SESSION['payrexx_gateway_id'] ?? false;
+        $orderId = $_SESSION['payrexx_gateway_referrenceId'] ?? false;
+        if ($gatewayId &&
+            $orderId && 
+            $this->isAllowedToChangeStatus($orderId, Transaction::CANCELLED)
+        ) {
+            $cancelStatus = [
+                Transaction::CANCELLED,
+                Transaction::DECLINED,
+                Transaction::ERROR,
+                Transaction::EXPIRED
+            ];
+            $transaction = $this->getTransactionByGateway($gatewayId);
+            if (!$transaction || in_array($transaction->getStatus(), $cancelStatus)) {
+                $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
+                //update status and customer-history
+                $orderWriteService->updateOrderStatus(
+                    new IdType($orderId),
+                    new IntType((int) 99),
+                    new StringType('Cancelled status updated by payrexx'),
+                    new BoolType(false)
+                );
+            }
+            unset($_SESSION['payrexx_gateway_id']);
+            unset($_SESSION['payrexx_gateway_referrenceId']);
+        }
+        $errorMessage = isset($_GET['payrexx_cancel'])
+            ? MODULE_PAYMENT_PAYREXX_CANCEL
+            : MODULE_PAYMENT_PAYREXX_FAILED;
+        $_SESSION['gm_error_message'] = urlencode($errorMessage);
+        xtc_redirect(xtc_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'));
     }
 
     /**
@@ -742,17 +757,6 @@ class payrexx_ORIGIN
             throw new \Exception('Fraudulent transaction status');
         }
 
-        // old status
-        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
-        $orderStatus = $db->select('orders_status.orders_status_name')
-            ->join('orders_status', 'orders.orders_status = orders_status.orders_status_id')
-            ->where('orders_status.language_id', 1) // En
-            ->where('orders.orders_id', $orderId )
-            ->limit(1)
-            ->get('orders')
-            ->result_array();
-        $oldStatus = $orderStatus[0]['orders_status_name'];
-
         // status mapping
         $transactionStatus = $transaction['status'];
         switch ($transactionStatus) {
@@ -794,7 +798,7 @@ class payrexx_ORIGIN
         }
 
         // check the status transition to change.
-        if ($this->isAllowedToChangeStatus($oldStatus, $newStatus)) {
+        if ($this->isAllowedToChangeStatus($orderId, $newStatus)) {
             /**
              * @var OrderWriteServiceInterface $orderWriteService
              */
@@ -807,19 +811,32 @@ class payrexx_ORIGIN
                 new BoolType(false)
             );
         } else {
-            throw new \Exception('Status transition not allowed from ' . $oldStatus);
+            throw new \Exception('Status transition not allowed');
         }
     }
 
     /**
      * Check the transition is allowed or not
      *
-     * @param string $oldStatus
+     * @param int $orderId
      * @param string $newStatus
      * @return bool
      */
-    private function isAllowedToChangeStatus($oldStatus, $newStatus)
+    private function isAllowedToChangeStatus($orderId, $newStatus)
     {
+        try {
+            $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+            $orderStatus = $db->select('orders_status.orders_status_name')
+                ->join('orders_status', 'orders.orders_status = orders_status.orders_status_id')
+                ->where('orders_status.language_id', 1) // En
+                ->where('orders.orders_id', $orderId )
+                ->limit(1)
+                ->get('orders')
+                ->result_array();
+            $oldStatus = $orderStatus[0]['orders_status_name'];
+        } catch (Exception $e) {
+            return false;
+        }
         switch ($oldStatus) {
             case static::STATUS_PENDING:
                 return !in_array($newStatus, [
