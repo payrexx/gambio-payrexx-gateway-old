@@ -32,6 +32,12 @@ Follow these steps to install the plugin.
 
 11. Set Enabled to “Yes” and save configuration
 
+### Payrexx Configuration
+To Configure the webhook URL in Payrexx, Log in your Payrexx account.
+
+1. Go to **Webhooks** -> **Add webhook** --> Find **Webhook URL**
+
+2. Insert the URL to your shop and add /callback/payrexx/dispatcher.php (e.g. If your shop url is https://www.example.com, the Webhook URL will be https://www.example.com/callback/payrexx/dispatcher.php)
 
 ## Built With
 
@@ -52,8 +58,6 @@ Follow these steps to install the plugin.
 - Add ideal-pay.ch in platform providers list.
 
 ## Authors
-
-* **kraath** - [github profile](https://github.com/kraath)
 
 See also the list of [contributors](payrexx-payment-gateway/graphs/contributors) who participated in this project.
 
