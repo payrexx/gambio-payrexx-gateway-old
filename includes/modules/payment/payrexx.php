@@ -297,9 +297,9 @@ class payrexx_ORIGIN
         $gateway->addField('surname', $order->billing['lastname']);
         $gateway->addField('company', $order->billing['company']);
         $gateway->addField('street', $order->billing['street_address']);
-        $gateway->addField('postcode', $order->billing['postc  ode']);
+        $gateway->addField('postcode', $order->billing['postcode']);
         $gateway->addField('place', $order->billing['city']);
-        $gateway->addField('country', $order->billing['country']['iso_code_2']);
+        $gateway->addField('country', $order->billing['country_iso_2']);
         $gateway->addField('phone', $order->customer['telephone']);
         $gateway->addField('email', $order->customer['email_address']);
         $gateway->addField('custom_field_1', $orderId, 'Gambio Order ID');
