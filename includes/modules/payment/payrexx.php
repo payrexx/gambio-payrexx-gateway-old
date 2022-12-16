@@ -117,45 +117,12 @@ class payrexx_ORIGIN
     }
 
     /**
-     * Get transaction by gatewayid
-     *
-     * @param int $id payrexx gatewayid
-     * @return Transaction|null
-     */
-    public function getTransactionByGateway($id)
-    {
-        $payrexx = $this->getInterface();
-        $gateway = new \Payrexx\Models\Request\Gateway();
-        $gateway->setId($id);
-        try {
-            $payrexxGateway = $payrexx->getOne($gateway);
-
-            if (!in_array($payrexxGateway->getStatus(), [Transaction::CONFIRMED, Transaction::WAITING])) {
-                return null;
-            }
-            $invoices = $payrexxGateway->getInvoices();
-
-            if (!$invoices || !$invoice = $invoices[0]) {
-                return null;
-            }
-
-            if (!$transactions = $invoice['transactions']) {
-                return null;
-            }
-
-            return $this->getTransactionById(end($transactions)['id']);
-        } catch (\Payrexx\PayrexxException $e) {
-            return null;
-        }
-    }
-
-    /**
      * Get Transaction by transaction id
      *
      * @param integer $id
      * @return array|Transaction
      */
-    public function getTransactionById($id)
+    public function getTransactionById(int $id)
     {
         $payrexx = $this->getInterface();
         $transaction = new Transaction();
@@ -467,29 +434,14 @@ class payrexx_ORIGIN
         $gatewayId = $_SESSION['payrexx_gateway_id'] ?? false;
         $orderId = $_SESSION['payrexx_gateway_referrenceId'] ?? false;
         if ($gatewayId &&
-            $orderId && 
+            $orderId &&
             $this->isAllowedToChangeStatus($orderId, Transaction::CANCELLED)
         ) {
-            $cancelStatus = [
-                Transaction::CANCELLED,
-                Transaction::DECLINED,
-                Transaction::ERROR,
-                Transaction::EXPIRED
-            ];
-            $transaction = $this->getTransactionByGateway($gatewayId);
-            if (!$transaction || in_array($transaction->getStatus(), $cancelStatus)) {
-                $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
-                //update status and customer-history
-                $orderWriteService->updateOrderStatus(
-                    new IdType($orderId),
-                    new IntType((int) 99),
-                    new StringType('Cancelled status updated by payrexx'),
-                    new BoolType(false)
-                );
-            }
+            $this->updateOrderStatus($orderId, 99, 'Cancelled');
             unset($_SESSION['payrexx_gateway_id']);
             unset($_SESSION['payrexx_gateway_referrenceId']);
         }
+        // Error messages.
         $errorMessage = isset($_GET['payrexx_cancel'])
             ? MODULE_PAYMENT_PAYREXX_CANCEL
             : MODULE_PAYMENT_PAYREXX_FAILED;
@@ -551,18 +503,18 @@ class payrexx_ORIGIN
                 ->result_array();
             $newOrdersStatusId = $newOrdersStatusId[0]['newOrdersStatusId'];
             foreach ($activeLanguages as $lang) {
-                $refundId = $this->isStatusExistInDb($lang['languages_id'], $statusName);
-                if (!$refundId) {
-                    $db->insert(
-                        'orders_status',
-                        [
-                            'orders_status_id' => $newOrdersStatusId,
-                            'language_id' => $lang['languages_id'],
-                            'orders_status_name' => $statusName,
-                            'color' => '2196F3',
-                        ]
-                    );
+                if ($this->orderStatusExists($lang['languages_id'], $statusName)) {
+                    continue;
                 }
+                $db->insert(
+                    'orders_status',
+                    [
+                        'orders_status_id' => $newOrdersStatusId,
+                        'language_id' => $lang['languages_id'],
+                        'orders_status_name' => $statusName,
+                        'color' => '2196F3',
+                    ]
+                );
             }
         }
     }
@@ -574,7 +526,7 @@ class payrexx_ORIGIN
      * @param string $statusName
      * @return bool|int
      */
-    public function isStatusExistInDb($langId, $statusName)
+    public function orderStatusExists($langId, $statusName)
     {
         $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
         $orderStatus = $db->select('orders_status_id')
@@ -731,27 +683,12 @@ class payrexx_ORIGIN
 
     /**
      * Handle webhook data
+     *
+     * @param array $transaction
      */
-    public function handleTransactionStatus()
+    public function handleTransactionStatus(array $transaction)
     {
-        $data = $_POST;
-
-        $transaction = $data['transaction'];
         $orderId = end(explode('_', $transaction['referenceId']));
-
-        if (!$orderId || !$transaction['status'] || !$transaction['id']) {
-            throw new \Exception('Payrexx Webhook Data incomplete');
-        }
-
-        $order = new order($orderId);
-        if (!$order) {
-            throw new \Exception('Malicious request');
-        }
-
-        $payrexxTransaction = $this->getTransactionById($transaction['id']);
-        if ($payrexxTransaction->getStatus() !== $transaction['status']) {
-            throw new \Exception('Fraudulent transaction status');
-        }
 
         // status mapping
         $transactionStatus = $transaction['status'];
@@ -776,17 +713,17 @@ class payrexx_ORIGIN
                 $newStatus = ($transactionStatus == Transaction::REFUNDED)
                     ? static::STATUS_REFUNDED
                     : static::STATUS_PARTIALLY_REFUNDED;
-                $newStatusId = $this->isStatusExistInDb(1, $newStatus);
+                $newStatusId = $this->orderStatusExists(1, $newStatus);
                 if (!$newStatusId) {
                     $this->addNewOrderStatus();
-                    $newStatusId = $this->isStatusExistInDb(1, $newStatus);
+                    $newStatusId = $this->orderStatusExists(1, $newStatus);
                 }
                 if (
                     $newStatus == static::STATUS_PARTIALLY_REFUNDED &&
                     $transaction['invoice']['originalAmount'] == $transaction['invoice']['refundedAmount']
                 ) {
                     $newStatus = static::STATUS_REFUNDED;
-                    $newStatusId = $this->isStatusExistInDb(1, $newStatus);
+                    $newStatusId = $this->orderStatusExists(1, $newStatus);
                 }
                 break;
             default:
@@ -794,21 +731,10 @@ class payrexx_ORIGIN
         }
 
         // check the status transition to change.
-        if ($this->isAllowedToChangeStatus($orderId, $newStatus)) {
-            /**
-             * @var OrderWriteServiceInterface $orderWriteService
-             */
-            $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
-            //update status and customer-history
-            $orderWriteService->updateOrderStatus(
-                new IdType($orderId),
-                new IntType((int)$newStatusId),
-                new StringType($newStatus . ' status updated by payrexx webhook'),
-                new BoolType(false)
-            );
-        } else {
+        if (!$this->isAllowedToChangeStatus($orderId, $newStatus)) {
             throw new \Exception('Status transition not allowed');
         }
+        $this->updateOrderStatus($orderId, $newStatusId, $newStatus);
     }
 
     /**
@@ -847,6 +773,25 @@ class payrexx_ORIGIN
                 ]);
         }
         return false;
+    }
+
+    /**
+     * Update order status
+     *
+     * @param int $orderId
+     * @param int $newStatusId
+     * @param string $newStatus
+     */
+    public function updateOrderStatus(int $orderId, int $newStatusId, string $newStatus)
+    {
+        $orderWriteService = StaticGXCoreLoader::getService('OrderWrite');
+        //update status and customer-history
+        $orderWriteService->updateOrderStatus(
+            new IdType($orderId),
+            new IntType((int)$newStatusId),
+            new StringType($newStatus . ' status updated by payrexx'),
+            new BoolType(false)
+        );
     }
 }
 
