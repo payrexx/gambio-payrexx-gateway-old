@@ -46,8 +46,8 @@ class payrexx_ORIGIN
     /**
      * Order status
      */
-    const STATUS_REFUNDED = 'Payrexx Refunded';
-    const STATUS_PARTIALLY_REFUNDED = 'Payrexx Partially Refunded';
+    const STATUS_REFUNDED = 'Payrexx refunded';
+    const STATUS_PARTIALLY_REFUNDED = 'Payrexx partially refunded';
     const STATUS_PENDING = 'Pending';
     const STATUS_PROCESSING = 'Processing';
     const STATUS_CANCELED = 'Canceled';
@@ -495,50 +495,42 @@ class payrexx_ORIGIN
      */
     public function addNewOrderStatus()
     {
-        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
-        $activeLanguages = $this->_xtc_get_languages();
-        foreach ([static::STATUS_REFUNDED, static::STATUS_PARTIALLY_REFUNDED] as $statusName) {
-            $newOrdersStatusId = $db->select('MAX(`orders_status_id`) + 1 As newOrdersStatusId')
-                ->get('orders_status')
-                ->result_array();
-            $newOrdersStatusId = $newOrdersStatusId[0]['newOrdersStatusId'];
-            foreach ($activeLanguages as $lang) {
-                if ($this->orderStatusExists($lang['languages_id'], $statusName)) {
-                    continue;
+        $newOrderStatusConfig = $this->getOrderStatusConfig();
+        $orderStatusService = StaticGXCoreLoader::getService('OrderStatus');
+        foreach ($newOrderStatusConfig as $statusConfig) {
+            $newOrderStatus = MainFactory::create('OrderStatus');
+            foreach (['en', 'de'] as $lang) {
+                $statusName = $statusConfig['names'][$lang] ?? $statusConfig['names']['en'];
+                if ($this->orderStatusExists($statusName, $lang)) {
+                    continue 2;
                 }
-                $db->insert(
-                    'orders_status',
-                    [
-                        'orders_status_id' => $newOrdersStatusId,
-                        'language_id' => $lang['languages_id'],
-                        'orders_status_name' => $statusName,
-                        'color' => '2196F3',
-                    ]
+                $newOrderStatus->setName(
+                    MainFactory::create('LanguageCode', new StringType($lang)),
+                    new StringType($statusName)
                 );
             }
+            $newOrderStatus->setColor(new StringType($statusConfig['color']));
+            $orderStatusService->create($newOrderStatus);
         }
     }
 
     /**
      * Check order status exist
      *
-     * @param integer $langId
      * @param string $statusName
+     * @param string $langCode
      * @return bool|int
      */
-    public function orderStatusExists($langId, $statusName)
+    public function orderStatusExists($statusName, $langCode = 'en')
     {
-        $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
-        $orderStatus = $db->select('orders_status_id')
-            ->where('language_id', $langId)
-            ->where('orders_status_name', $statusName)
-            ->get('orders_status')
-            ->result_array();
-        $orderStatusId = $orderStatus[0]['orders_status_id'];
-        if ((int) $orderStatusId > 0) {
-            return $orderStatusId;
+        $orderStatusId = false;
+        $orderStatusService = StaticGXCoreLoader::getService('OrderStatus');
+        foreach ($orderStatusService->findAll() as $orderStatus) {
+            if ($orderStatus->getName(MainFactory::create('LanguageCode', new StringType($langCode))) === $statusName) {
+                return $orderStatusId = (int) $orderStatus->getId();
+            }
         }
-        return false;
+        return $orderStatusId;
     }
 
     /**
@@ -664,6 +656,29 @@ class payrexx_ORIGIN
         return $config;
     }
 
+    /**
+     * Get order status config
+     */
+    public function getOrderStatusConfig()
+    {
+        return [
+            'refunded' => [
+                'names' => [
+                    'en' => static::STATUS_REFUNDED,
+                    'de' => 'Payrexx refunded',
+                ],
+                'color' => '2196F3',
+            ],
+            'partially-refunded' => [
+                'names' => [
+                    'en' => static::STATUS_PARTIALLY_REFUNDED,
+                    'de' => 'Payrexx partially refunded',
+                ],
+                'color' => '2196F3',
+            ],
+        ];
+    }
+
     function getPaymentMethods()
     {
         $paymentMethods =  [
@@ -710,20 +725,18 @@ class payrexx_ORIGIN
                 break;
             case Transaction::REFUNDED:
             case Transaction::PARTIALLY_REFUNDED:
-                $newStatus = ($transactionStatus == Transaction::REFUNDED)
-                    ? static::STATUS_REFUNDED
-                    : static::STATUS_PARTIALLY_REFUNDED;
-                $newStatusId = $this->orderStatusExists(1, $newStatus);
+                $newStatus = $this->getOrderStatusConfig()[$transactionStatus]['names']['en'];
+                $newStatusId = $this->orderStatusExists($newStatus);
                 if (!$newStatusId) {
                     $this->addNewOrderStatus();
-                    $newStatusId = $this->orderStatusExists(1, $newStatus);
+                    $newStatusId = $this->orderStatusExists($newStatus);
                 }
                 if (
                     $newStatus == static::STATUS_PARTIALLY_REFUNDED &&
                     $transaction['invoice']['originalAmount'] == $transaction['invoice']['refundedAmount']
                 ) {
                     $newStatus = static::STATUS_REFUNDED;
-                    $newStatusId = $this->orderStatusExists(1, $newStatus);
+                    $newStatusId = $this->orderStatusExists($newStatus);
                 }
                 break;
             default:
@@ -748,9 +761,15 @@ class payrexx_ORIGIN
     {
         try {
             $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
+            $languages = $db->select('languages_id')
+                ->where('code', 'en')
+                ->get('languages')
+                ->result_array();
+            $langId =  $languages[0]['languages_id'];
+
             $orderStatus = $db->select('orders_status.orders_status_name')
                 ->join('orders_status', 'orders.orders_status = orders_status.orders_status_id')
-                ->where('orders_status.language_id', 1) // En
+                ->where('orders_status.language_id', $langId)
                 ->where('orders.orders_id', $orderId )
                 ->limit(1)
                 ->get('orders')
