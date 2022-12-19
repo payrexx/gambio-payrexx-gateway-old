@@ -665,14 +665,14 @@ class payrexx_ORIGIN
             'refunded' => [
                 'names' => [
                     'en' => static::STATUS_REFUNDED,
-                    'de' => 'Payrexx refunded',
+                    'de' => 'Payrexx rückerstattet',
                 ],
                 'color' => '2196F3',
             ],
             'partially-refunded' => [
                 'names' => [
                     'en' => static::STATUS_PARTIALLY_REFUNDED,
-                    'de' => 'Payrexx partially refunded',
+                    'de' => 'Payrexx teilrückerstattung',
                 ],
                 'color' => '2196F3',
             ],
