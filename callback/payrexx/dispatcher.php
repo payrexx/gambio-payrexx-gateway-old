@@ -27,7 +27,11 @@ try {
     if ($payrexxTransaction->getStatus() !== $transaction['status']) {
         throw new \Exception('Fraudulent transaction status');
     }
-    $payrexx->handleTransactionStatus($transaction);
+    $payrexx->handleTransactionStatus(
+        $orderId,
+        $transaction['status'],
+        $transaction['invoice']
+    );
     echo 'Success: Webhook processed!';
 } catch (Exception $e) {
     echo 'Error: ' . $e->getMessage();

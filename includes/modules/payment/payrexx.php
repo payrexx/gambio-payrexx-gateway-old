@@ -433,11 +433,8 @@ class payrexx_ORIGIN
         // Process the cancel/failed orders.
         $gatewayId = $_SESSION['payrexx_gateway_id'] ?? false;
         $orderId = $_SESSION['payrexx_gateway_referrenceId'] ?? false;
-        if ($gatewayId &&
-            $orderId &&
-            $this->isAllowedToChangeStatus($orderId, Transaction::CANCELLED)
-        ) {
-            $this->updateOrderStatus($orderId, 99, 'Cancelled');
+        if ($gatewayId && $orderId) {
+            $this->handleTransactionStatus($orderId, Transaction::CANCELLED);
             unset($_SESSION['payrexx_gateway_id']);
             unset($_SESSION['payrexx_gateway_referrenceId']);
         }
@@ -665,14 +662,14 @@ class payrexx_ORIGIN
             'refunded' => [
                 'names' => [
                     'en' => static::STATUS_REFUNDED,
-                    'de' => 'Payrexx rückerstattet',
+                    'de' => 'Payrexx Rückerstattung',
                 ],
                 'color' => '2196F3',
             ],
             'partially-refunded' => [
                 'names' => [
                     'en' => static::STATUS_PARTIALLY_REFUNDED,
-                    'de' => 'Payrexx teilrückerstattung',
+                    'de' => 'Payrexx Teilrückerstattung',
                 ],
                 'color' => '2196F3',
             ],
@@ -699,15 +696,14 @@ class payrexx_ORIGIN
     /**
      * Handle webhook data
      *
-     * @param array $transaction
+     * @param int $orderId
+     * @param string $status
+     * @param array $invoice
      */
-    public function handleTransactionStatus(array $transaction)
+    public function handleTransactionStatus(int $orderId, string $status, array $invoice = [])
     {
-        $orderId = end(explode('_', $transaction['referenceId']));
-
         // status mapping
-        $transactionStatus = $transaction['status'];
-        switch ($transactionStatus) {
+        switch ($status) {
             case Transaction::WAITING:
                 $newStatusId = 1; // Pending
                 $newStatus = static::STATUS_PENDING;
@@ -725,7 +721,7 @@ class payrexx_ORIGIN
                 break;
             case Transaction::REFUNDED:
             case Transaction::PARTIALLY_REFUNDED:
-                $newStatus = $this->getOrderStatusConfig()[$transactionStatus]['names']['en'];
+                $newStatus = $this->getOrderStatusConfig()[$status]['names']['en'];
                 $newStatusId = $this->orderStatusExists($newStatus);
                 if (!$newStatusId) {
                     $this->addNewOrderStatus();
@@ -733,14 +729,15 @@ class payrexx_ORIGIN
                 }
                 if (
                     $newStatus == static::STATUS_PARTIALLY_REFUNDED &&
-                    $transaction['invoice']['originalAmount'] == $transaction['invoice']['refundedAmount']
+                    !empty($invoice) &&
+                    $invoice['originalAmount'] == $invoice['refundedAmount']
                 ) {
                     $newStatus = static::STATUS_REFUNDED;
                     $newStatusId = $this->orderStatusExists($newStatus);
                 }
                 break;
             default:
-                throw new \Exception($transactionStatus . ' case not implemented.');
+                throw new \Exception($status . ' case not implemented.');
         }
 
         // check the status transition to change.
@@ -788,7 +785,6 @@ class payrexx_ORIGIN
             case static::STATUS_PARTIALLY_REFUNDED:
                 return in_array($newStatus, [
                     static::STATUS_REFUNDED,
-                    static::STATUS_PARTIALLY_REFUNDED,
                 ]);
         }
         return false;
