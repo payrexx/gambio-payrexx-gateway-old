@@ -434,7 +434,10 @@ class payrexx_ORIGIN
         $gatewayId = $_SESSION['payrexx_gateway_id'] ?? false;
         $orderId = $_SESSION['payrexx_gateway_referrenceId'] ?? false;
         if ($gatewayId && $orderId) {
-            $this->handleTransactionStatus($orderId, Transaction::CANCELLED);
+            try {
+                $this->handleTransactionStatus($orderId, Transaction::CANCELLED);
+            } catch(Exception $e) {
+            }
             unset($_SESSION['payrexx_gateway_id']);
             unset($_SESSION['payrexx_gateway_referrenceId']);
         }
