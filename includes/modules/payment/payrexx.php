@@ -247,9 +247,6 @@ class payrexx_ORIGIN
         } catch (\Payrexx\PayrexxException $e) {
             return false;
         }
-        // To use cancel/failed purpose.
-        $_SESSION['payrexx_gateway_id'] = $response->getId();
-        $_SESSION['payrexx_gateway_referrenceId'] = $orderId;
         $payrexxPaymentUrl = str_replace('?', $_SESSION['language_code'] . '/?', $response->getLink());
         xtc_redirect($payrexxPaymentUrl);
     }
@@ -426,20 +423,15 @@ class payrexx_ORIGIN
      */
     public function after_process()
     {
+        global $insert_id;
+
         if (!isset($_GET['payrexx_cancel']) && !isset($_GET['payrexx_failed'])) {
             return false;
         }
 
-        // Process the cancel/failed orders.
-        $gatewayId = $_SESSION['payrexx_gateway_id'] ?? false;
-        $orderId = $_SESSION['payrexx_gateway_referrenceId'] ?? false;
-        if ($gatewayId && $orderId) {
-            try {
-                $this->handleTransactionStatus($orderId, Transaction::CANCELLED);
-            } catch(Exception $e) {
-            }
-            unset($_SESSION['payrexx_gateway_id']);
-            unset($_SESSION['payrexx_gateway_referrenceId']);
+        try {
+            $this->handleTransactionStatus($insert_id, Transaction::CANCELLED);
+        } catch(Exception $e) {
         }
         // Error messages.
         $errorMessage = isset($_GET['payrexx_cancel'])
