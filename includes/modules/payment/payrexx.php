@@ -736,7 +736,7 @@ class payrexx_ORIGIN
         }
 
         // check the status transition to change.
-        if (!$this->isAllowedToChangeStatus($orderId, $newStatus)) {
+        if (!$this->allowedStatusTransition($orderId, $newStatus)) {
             throw new \Exception('Status transition not allowed');
         }
         $this->updateOrderStatus($orderId, $newStatusId, $newStatus);
@@ -749,7 +749,7 @@ class payrexx_ORIGIN
      * @param string $newStatus
      * @return bool
      */
-    private function isAllowedToChangeStatus($orderId, $newStatus)
+    private function allowedStatusTransition($orderId, $newStatus)
     {
         try {
             $db = StaticGXCoreLoader::getDatabaseQueryBuilder();
@@ -770,6 +770,10 @@ class payrexx_ORIGIN
         } catch (Exception $e) {
             return false;
         }
+        if ($oldStatus === $newStatus) {
+            return false;
+        }
+
         switch ($oldStatus) {
             case static::STATUS_PENDING:
                 return !in_array($newStatus, [
@@ -780,6 +784,7 @@ class payrexx_ORIGIN
             case static::STATUS_PARTIALLY_REFUNDED:
                 return in_array($newStatus, [
                     static::STATUS_REFUNDED,
+                    static::STATUS_PARTIALLY_REFUNDED,
                 ]);
         }
         return false;
